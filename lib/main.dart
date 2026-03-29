@@ -107,7 +107,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
     await prefs.setString('estoque_cic', jsonString);
   }
 
-  // --- BUSCA SUBSTITUTA (OPEN FOOD FACTS) PARA CUMPRIR O CRONOGRAMA ---
+  
   Future<void> buscarNaAPI(String codigo) async {
     setState(() {
       buscando = true;
