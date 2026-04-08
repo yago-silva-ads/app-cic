@@ -7,4 +7,16 @@ Através do framework Flutter, traremos esta aplicação para o sistema Web e An
 
 # Como usar a Aplicação
 
+Neste período de desenvolvimento, o aplicativo pode ser acessado pelo framework Flutter, que possui um direcionamento multiplataforma.
+Para abrir o projeto em seu dispositivo, é necessário que você possua os seguintes componentes:
+
+- Flutter SDK
+- um editor de texto (recomendável ser o Visual Studio Code).
+
+Ao abrir o projeto no editor de texto, para iniciar a aplicação, você pode se direcionar para a pasta "lib" e abrir o arquivo "main.dart".
+
+Lá, você poderá rodar o arquivo e selecionar o navegador de sua preferência, seja Microsoft Edge, Google Chrome(...).
+
+Posteriormente será aplicado para a versão em Android também.
+
 
