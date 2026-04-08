@@ -11,7 +11,8 @@ Neste período de desenvolvimento, o aplicativo pode ser acessado pelo framework
 Para abrir o projeto em seu dispositivo, é necessário que você possua os seguintes componentes:
 
 - Flutter SDK
-- um editor de texto (recomendável ser o Visual Studio Code).
+- Um editor de texto (recomendável ser o Visual Studio Code).
+- Uma webcam para a leitura do código de barras. 
 
 Ao abrir o projeto no editor de texto, para iniciar a aplicação, você pode se direcionar para a pasta "lib" e abrir o arquivo "main.dart".
 
