@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+  <body>
+    <h3>Teste getUserMedia</h3>
+    <video id="v" autoplay playsinline width="640" height="480" style="background:#000"></video>
+    <script>
+      async function start() {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          document.getElementById('v').srcObject = stream;
+          console.log('getUserMedia OK');
+        } catch (e) {
+          console.error('getUserMedia ERRO:', e);
+        }
+      }
+      start();
+    </script>
+  </body>
+</html>
