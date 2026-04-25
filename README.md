@@ -1,17 +1,25 @@
-# app_cic
+# Projeto CIC 
 
-A new Flutter project.
+Bem-vindo! 
+Nosso aplicativo tem a função de ler o código de barras e auxiliá-lo a reconhecer o item através dos códigos GTIN-13 providos pela GS1.
 
-## Getting Started
+Através do framework Flutter, traremos esta aplicação para o sistema Web e Android.
 
-This project is a starting point for a Flutter application.
+# Como usar a Aplicação
 
-A few resources to get you started if this is your first Flutter project:
+Neste período de desenvolvimento, o aplicativo pode ser acessado pelo framework Flutter, que possui um direcionamento multiplataforma.
+Para abrir o projeto em seu dispositivo, é necessário que você possua os seguintes componentes:
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+- Flutter SDK
+- Um editor de texto (recomendável ser o Visual Studio Code).
+- Uma webcam para a leitura do código de barras. 
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Ao abrir o projeto no editor de texto, para iniciar a aplicação, você pode se direcionar para a pasta "lib" e abrir o arquivo "main.dart".
+
+Ou, basta abrir a pasta do projeto através do terminal e escrever o comando "flutter run"
+
+Lá, você poderá rodar o arquivo e selecionar o navegador de sua preferência, seja Microsoft Edge, Google Chrome(...).
+
+Posteriormente será aplicado para a versão em Android também.
+
+
