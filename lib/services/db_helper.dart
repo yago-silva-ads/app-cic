@@ -3,12 +3,11 @@ import 'package:path/path.dart';
 import '../models/produto.dart';
 
 class DBHelper {
-  // Nome e versão do seu banco de dados local
   static const _dbName = 'estoque_cic.db';
-  static const _dbVersion = 1;
+  // Mudamos a versão para 2 para o app saber que a tabela cresceu
+  static const _dbVersion = 2; 
   static const _tableName = 'produtos';
 
-  // Padrão Singleton: Garante que só exista 1 conexão aberta com o banco
   DBHelper._();
   static final DBHelper instance = DBHelper._();
 
@@ -21,7 +20,6 @@ class DBHelper {
   }
 
   Future<Database> _initDB() async {
-    // Acha a pasta segura de bancos de dados dentro do Android/iOS
     String dbPath = await getDatabasesPath();
     String path = join(dbPath, _dbName);
 
@@ -29,10 +27,10 @@ class DBHelper {
       path,
       version: _dbVersion,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade, // Gatilho para atualizar o banco antigo
     );
   }
 
-  // Cria a Tabela usando SQL puro
   Future _onCreate(Database db, int version) async {
     await db.execute('''
       CREATE TABLE $_tableName (
@@ -40,32 +38,38 @@ class DBHelper {
         nome TEXT NOT NULL,
         lote TEXT,
         quantidade INTEGER NOT NULL,
-        valorCompra REAL NOT NULL
+        valorCompra REAL NOT NULL,
+        markup REAL NOT NULL,
+        valorVenda REAL NOT NULL
       )
     ''');
   }
 
-  // Função INSERT
+  // Se o usuário já tinha o app instalado (Versão 1), adiciona as colunas novas sem deletar nada
+  Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute("ALTER TABLE $_tableName ADD COLUMN markup REAL NOT NULL DEFAULT 2.0");
+      await db.execute("ALTER TABLE $_tableName ADD COLUMN valorVenda REAL NOT NULL DEFAULT 0.0");
+    }
+  }
+
   Future<int> insertProduto(Produto produto) async {
     Database db = await instance.database;
     return await db.insert(
       _tableName,
       produto.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace, // Se já existir o código, ele substitui
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  // Função SELECT (Busca tudo)
   Future<List<Produto>> getEstoque() async {
     Database db = await instance.database;
     final List<Map<String, dynamic>> maps = await db.query(_tableName);
-    
     return List.generate(maps.length, (i) {
       return Produto.fromJson(maps[i]);
     });
   }
 
-  // Função DELETE
   Future<int> deleteProduto(String codigo) async {
     Database db = await instance.database;
     return await db.delete(

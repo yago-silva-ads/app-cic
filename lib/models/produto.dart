@@ -4,6 +4,8 @@ class Produto {
   final String lote;
   final int quantidade;
   final double valorCompra;
+  final double markup; // <-- VOLTOU!
+  final double valorVenda; 
 
   Produto({
     required this.codigo,
@@ -11,6 +13,8 @@ class Produto {
     required this.lote,
     required this.quantidade,
     required this.valorCompra,
+    required this.markup,
+    required this.valorVenda, 
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,6 +23,8 @@ class Produto {
         'lote': lote,
         'quantidade': quantidade,
         'valorCompra': valorCompra,
+        'markup': markup,
+        'valorVenda': valorVenda, 
       };
 
   factory Produto.fromJson(Map<String, dynamic> json) => Produto(
@@ -27,5 +33,7 @@ class Produto {
         lote: json['lote'],
         quantidade: json['quantidade'],
         valorCompra: json['valorCompra'],
+        markup: json['markup'] ?? 2.0, 
+        valorVenda: json['valorVenda'] ?? 0.0, 
       );
 }
