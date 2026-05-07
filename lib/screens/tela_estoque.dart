@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
 import '../services/db_helper.dart';

@@ -116,8 +116,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
   }
 
   void salvar() async {
-    if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...')
+    if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...') {
       return;
+    }
 
     int? qtd = int.tryParse(quantidadeController.text);
     String valorTexto = valorCompraController.text

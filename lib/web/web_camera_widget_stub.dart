@@ -7,7 +7,7 @@ class WebCameraWidget extends StatelessWidget {
   final double height;
   final OnCodeDetected? onCodeDetected;
 
-  const WebCameraWidget({Key? key, this.width = 640, this.height = 480, this.onCodeDetected}) : super(key: key);
+  const WebCameraWidget({super.key, this.width = 640, this.height = 480, this.onCodeDetected});
 
   @override
   Widget build(BuildContext context) {

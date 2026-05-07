@@ -12,7 +12,7 @@ class WebCameraWidget extends StatefulWidget {
   final double height;
   final OnCodeDetected? onCodeDetected;
 
-  const WebCameraWidget({Key? key, this.width = 640, this.height = 480, this.onCodeDetected}) : super(key: key);
+  const WebCameraWidget({super.key, this.width = 640, this.height = 480, this.onCodeDetected});
 
   @override
   State<WebCameraWidget> createState() => _WebCameraWidgetState();
@@ -94,7 +94,9 @@ class _WebCameraWidgetState extends State<WebCameraWidget> {
   void dispose() {
     _scanning = false;
     if (_stream != null) {
-      for (final t in _stream!.getTracks()) t.stop();
+      for (final t in _stream!.getTracks()) {
+        t.stop();
+      }
     }
     _video.srcObject = null;
     super.dispose();
@@ -129,7 +131,9 @@ class _WebCameraWidgetState extends State<WebCameraWidget> {
               onPressed: () {
                 _scanning = false;
                 if (_stream != null) {
-                  for (final t in _stream!.getTracks()) t.stop();
+                  for (final t in _stream!.getTracks()) {
+                    t.stop();
+                  }
                 }
                 _video.srcObject = null;
               },
