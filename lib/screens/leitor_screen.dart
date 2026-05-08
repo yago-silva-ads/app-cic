@@ -8,6 +8,7 @@ import '../services/db_helper.dart';
 import '../services/api_service.dart';
 import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
+import 'tela_vendedor.dart';
 
 class LeitorScreen extends StatefulWidget {
   const LeitorScreen({super.key});
@@ -208,6 +209,13 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   onUpdate: _atualizarTela,
                 ),
               ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.attach_money),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const TelaVendedor()),
             ),
           ),
         ],
