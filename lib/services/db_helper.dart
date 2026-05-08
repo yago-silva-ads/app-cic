@@ -1,12 +1,14 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/produto.dart';
+import '../models/custo_operacional.dart';
 
 class DBHelper {
   static const _dbName = 'estoque_cic.db';
-  // Mudamos a versão para 2 para o app saber que a tabela cresceu
-  static const _dbVersion = 2; 
+  // Versão 3 inclui tabela de custos operacionais
+  static const _dbVersion = 3;
   static const _tableName = 'produtos';
+  static const _tableCustos = 'custos_operacionais';
 
   DBHelper._();
   static final DBHelper instance = DBHelper._();
@@ -43,13 +45,30 @@ class DBHelper {
         valorVenda REAL NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE $_tableCustos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        valor REAL NOT NULL
+      )
+    ''');
   }
 
-  // Se o usuário já tinha o app instalado (Versão 1), adiciona as colunas novas sem deletar nada
+  // Atualiza o banco se for uma versão mais antiga
   Future _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute("ALTER TABLE $_tableName ADD COLUMN markup REAL NOT NULL DEFAULT 2.0");
       await db.execute("ALTER TABLE $_tableName ADD COLUMN valorVenda REAL NOT NULL DEFAULT 0.0");
+    }
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE $_tableCustos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT NOT NULL,
+          valor REAL NOT NULL
+        )
+      ''');
     }
   }
 
@@ -77,5 +96,28 @@ class DBHelper {
       where: 'codigo = ?',
       whereArgs: [codigo],
     );
+  }
+
+  Future<List<CustoOperacional>> getCustosOperacionais() async {
+    Database db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(_tableCustos);
+    return List.generate(maps.length, (i) {
+      return CustoOperacional.fromJson(maps[i]);
+    });
+  }
+
+  Future<int> replaceCustosOperacionais(List<CustoOperacional> custos) async {
+    Database db = await instance.database;
+    await db.delete(_tableCustos);
+    int inserted = 0;
+    for (var custo in custos) {
+      await db.insert(
+        _tableCustos,
+        custo.toJson(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      inserted++;
+    }
+    return inserted;
   }
 }
