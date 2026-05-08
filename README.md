@@ -47,6 +47,9 @@ O dashboard analisa as informações dos produtos cadastrados no estoque atual e
 Artificial, também é possível analisar o produto com maior retorno por unidade registrado e ele retorna um exame informando sobre dados do produto que merecem atenção, se houver
 um baixo número de itens no estoque, seu potencial de venda comparado com o custo, entre outras informações relevantes sobre o inventário cadastrado.
 
+## Custos Operacionais
+
+O intuito desta página é que o usuário registre os custos fixos operacionais de seu estabelecimento, tendo a opção de rotulá-los e somá-los.
 
 
 
