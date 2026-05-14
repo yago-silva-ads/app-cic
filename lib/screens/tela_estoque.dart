@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
 import '../services/db_helper.dart';
+import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
 
@@ -93,7 +94,7 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                   TextField(
                     controller: q,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Qtd"),
+                    decoration: const InputDecoration(labelText: "Quantidade"),
                   ),
                   TextField(
                     controller: custoCtrl,
@@ -109,7 +110,7 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                       decimal: true,
                     ),
                     decoration: const InputDecoration(
-                      labelText: "Markup (Ex: 2.0)",
+                      labelText: "Margem (Ex: 2.0)",
                     ),
                     onChanged: (_) =>
                         recalcularVenda(), 
@@ -122,11 +123,11 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                     items: const [
                       DropdownMenuItem(
                         value: 'revendido',
-                        child: Text('Produto revendido'),
+                        child: Text('Revendido'),
                       ),
                       DropdownMenuItem(
                         value: 'produzido',
-                        child: Text('Produto produzido'),
+                        child: Text('Produzido'),
                       ),
                     ],
                     onChanged: (value) {
@@ -196,30 +197,41 @@ class _TelaEstoqueState extends State<TelaEstoque> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Estoque Atual"),
-        actions: [
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-        ],
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1565C0),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
                 ),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LeitorScreen()),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.pie_chart),

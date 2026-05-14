@@ -195,30 +195,37 @@ class _LeitorScreenState extends State<LeitorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Leitor CIC 2026'),
-        actions: [
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-        ],
       ),
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            const DrawerHeader(
-              decoration: BoxDecoration(
-                color: Colors.blue,
-              ),
-              child: Text(
-                'Menu',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1565C0),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
                 ),
               ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+              },
             ),
             ListTile(
               leading: const Icon(Icons.pie_chart),
@@ -337,11 +344,11 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     items: const [
                       DropdownMenuItem(
                         value: 'revendido',
-                        child: Text('Produto revendido'),
+                        child: Text('Revendido'),
                       ),
                       DropdownMenuItem(
                         value: 'produzido',
-                        child: Text('Produto produzido'),
+                        child: Text('Produzido'),
                       ),
                     ],
                     onChanged: (value) {
@@ -368,7 +375,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-                          decoration: const InputDecoration(labelText: 'Qtd'),
+                          decoration: const InputDecoration(labelText: 'Quantidade'),
                         ),
                       ),
                     ],
