@@ -32,6 +32,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
   ); // Lucro de 100% por padrão
   final TextEditingController valorVendaController = TextEditingController();
 
+  String tipoProdutoSelecionado = 'revendido'; // Novo campo
+
   List<Produto> bancoDeEstoque = [];
 
   @override
@@ -155,6 +157,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompra: valor,
       markup: markup,
       valorVenda: valorVenda,
+      tipoProduto: tipoProdutoSelecionado,
     );
 
     await DBHelper.instance.insertProduto(novoProduto);
@@ -181,6 +184,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompraController.clear();
       markupController.text = '2.0';
       valorVendaController.clear();
+      tipoProdutoSelecionado = 'revendido';
     });
 
     scannerController.start();
@@ -191,34 +195,78 @@ class _LeitorScreenState extends State<LeitorScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Leitor CIC 2026'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.pie_chart),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TelaDashboard()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TelaEstoque(
-                  estoque: bancoDeEstoque,
-                  onUpdate: _atualizarTela,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1565C0),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.attach_money),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TelaVendedor()),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+              },
             ),
-          ),
-        ],
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TelaEstoque(
+                      estoque: bancoDeEstoque,
+                      onUpdate: _atualizarTela,
+                    ),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -288,6 +336,28 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: tipoProdutoSelecionado,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo de Produto',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'revendido',
+                        child: Text('Revendido'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'produzido',
+                        child: Text('Produzido'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        tipoProdutoSelecionado = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
 
                   Row(
                     children: [
@@ -305,7 +375,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-                          decoration: const InputDecoration(labelText: 'Qtd'),
+                          decoration: const InputDecoration(labelText: 'Quantidade'),
                         ),
                       ),
                     ],
@@ -351,7 +421,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                   decimal: true,
                                 ),
                                 decoration: const InputDecoration(
-                                  labelText: 'Markup (Ex: 2.0)',
+                                  labelText: 'Margem (Ex: 2.0)',
                                 ),
                               ),
                             ),

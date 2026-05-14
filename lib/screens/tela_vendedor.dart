@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../models/custo_operacional.dart';
 import '../services/db_helper.dart';
 import '../utils/moeda_formatter.dart';
+import 'leitor_screen.dart';
+import 'tela_dashboard.dart';
+import 'tela_estoque.dart';
 
 class TelaVendedor extends StatefulWidget {
   const TelaVendedor({super.key});
@@ -141,6 +144,75 @@ class _TelaVendedorState extends State<TelaVendedor> {
         title: const Text("Custos Operacionais"),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1565C0),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LeitorScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TelaEstoque(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
       ),
       body: _carregando
           ? const Center(child: CircularProgressIndicator())

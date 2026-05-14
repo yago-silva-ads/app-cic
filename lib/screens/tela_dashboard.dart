@@ -3,6 +3,9 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/custo_operacional.dart';
 import '../models/produto.dart';
 import '../services/db_helper.dart';
+import 'leitor_screen.dart';
+import 'tela_estoque.dart';
+import 'tela_vendedor.dart';
 
 class TelaDashboard extends StatefulWidget {
   const TelaDashboard({super.key});
@@ -120,13 +123,81 @@ class _TelaDashboardState extends State<TelaDashboard> {
   Widget build(BuildContext context) {
     double lucroProjetado = valorVendaTotal - custoTotal;
     double lucroAposFixos = valorVendaTotal - (custoTotal + custosOperacionaisTotal);
-    double custoTotalGeral = custoTotal + custosOperacionaisTotal;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard Inteligente"),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF1565C0),
+                ),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LeitorScreen()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TelaEstoque(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: estoque.isEmpty && custosOperacionais.isEmpty
           ? const Center(child: Text("Sem dados no stock para analisar."))
@@ -155,39 +226,39 @@ class _TelaDashboardState extends State<TelaDashboard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Custos Operacionais:"),
-                              Text("R\$ ${custosOperacionaisTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                              const Text("Retorno Esperado:"),
+                              Text("R\$ ${valorVendaTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Retorno Esperado:"),
-                              Text("R\$ ${valorVendaTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                              const Text("Custos Operacionais:"),
+                              Text("R\$ ${custosOperacionaisTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const Divider(height: 30, thickness: 1),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Lucro Projetado:", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              Text("R\$ ${lucroProjetado.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue, fontSize: 18, fontWeight: FontWeight.bold)),
+                              const Text("Retorno Financeiro:", style: TextStyle(fontSize: 14)),
+                              Text("R\$ ${lucroProjetado.toStringAsFixed(2)}", style: const TextStyle(color: Colors.cyan, fontSize: 14, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Lucro após custos fixos:", style: TextStyle(fontSize: 14)),
-                              Text("R\$ ${lucroAposFixos.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blueGrey, fontSize: 14, fontWeight: FontWeight.bold)),
+                              Text("Saldo Operacional:\n(Lucro: ${custoTotal > 0 ? ((lucroAposFixos / custoTotal) * 100).toStringAsFixed(1) : '0.0'}%):", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              Text("R\$ ${lucroAposFixos.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue, fontSize: 18, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 30),
+                  /* const SizedBox(height: 30),
                   const Text("Custo vs Potencial de Venda", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 30),
                   SizedBox(
@@ -219,9 +290,9 @@ class _TelaDashboardState extends State<TelaDashboard> {
                         ],
                       ),
                     ),
-                  ),
+                  ), */
                   const SizedBox(height: 40),
-                  const Text("Custos Operacionais vs Venda Total", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text("Custos Operacionais vs Potencial de Venda", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 30),
                   SizedBox(
                     height: 250,
@@ -239,7 +310,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                               reservedSize: 60,
                               getTitlesWidget: (value, meta) {
                                 if (value.toInt() == 0) return const Padding(padding: EdgeInsets.only(top: 10), child: Text('Estoque', style: TextStyle(fontWeight: FontWeight.bold)));
-                                if (value.toInt() == 1) return const Padding(padding: EdgeInsets.only(top: 10), child: Text('Fixos', style: TextStyle(fontWeight: FontWeight.bold)));
+                                if (value.toInt() == 1) return const Padding(padding: EdgeInsets.only(top: 10), child: Text('Operacionais', style: TextStyle(fontWeight: FontWeight.bold)));
                                 if (value.toInt() == 2) return const Padding(padding: EdgeInsets.only(top: 10), child: Text('Venda', style: TextStyle(fontWeight: FontWeight.bold)));
                                 return const Text('');
                               },
@@ -261,7 +332,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                     icon: _isAnalyzing
                         ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.auto_awesome, color: Colors.white),
-                    label: Text(_isAnalyzing ? "Analisando estoque..." : "Consultar IA ✨", style: const TextStyle(fontSize: 16)),
+                    label: Text(_isAnalyzing ? "Analisando estoque..." : "Análise", style: const TextStyle(fontSize: 16)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.deepPurple,
                       foregroundColor: Colors.white,
