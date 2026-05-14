@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Quando o João Paulo passar a API oficial da GS1, você troca o link aqui!
-  static const String _baseUrl = 'https://world.openfoodfacts.org/api/v0/product/';
+  static const String _baseUrl = 'https://world.openfoodfacts.orgit checg/api/v0/product/';
   
   // Se a GS1 exigir um token (bearer token, api-key), você vai colocar ele aqui no futuro
   // static const String _gs1Token = 'ABC-123-SEU-TOKEN-AQUI';

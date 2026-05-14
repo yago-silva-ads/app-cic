@@ -5,8 +5,8 @@ import '../models/custo_operacional.dart';
 
 class DBHelper {
   static const _dbName = 'estoque_cic.db';
-  // Versão 3 inclui tabela de custos operacionais
-  static const _dbVersion = 3;
+  // Versão 4 inclui campo tipoProduto
+  static const _dbVersion = 4;
   static const _tableName = 'produtos';
   static const _tableCustos = 'custos_operacionais';
 
@@ -42,7 +42,8 @@ class DBHelper {
         quantidade INTEGER NOT NULL,
         valorCompra REAL NOT NULL,
         markup REAL NOT NULL,
-        valorVenda REAL NOT NULL
+        valorVenda REAL NOT NULL,
+        tipoProduto TEXT NOT NULL DEFAULT 'revendido'
       )
     ''');
 
@@ -69,6 +70,9 @@ class DBHelper {
           valor REAL NOT NULL
         )
       ''');
+    }
+    if (oldVersion < 4) {
+      await db.execute("ALTER TABLE $_tableName ADD COLUMN tipoProduto TEXT NOT NULL DEFAULT 'revendido'");
     }
   }
 

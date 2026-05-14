@@ -3,6 +3,8 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/custo_operacional.dart';
 import '../models/produto.dart';
 import '../services/db_helper.dart';
+import 'tela_estoque.dart';
+import 'tela_vendedor.dart';
 
 class TelaDashboard extends StatefulWidget {
   const TelaDashboard({super.key});
@@ -120,13 +122,70 @@ class _TelaDashboardState extends State<TelaDashboard> {
   Widget build(BuildContext context) {
     double lucroProjetado = valorVendaTotal - custoTotal;
     double lucroAposFixos = valorVendaTotal - (custoTotal + custosOperacionaisTotal);
-    double custoTotalGeral = custoTotal + custosOperacionaisTotal;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard Inteligente"),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
+        actions: [
+          Builder(
+            builder: (context) => IconButton(
+              icon: const Icon(Icons.menu),
+              onPressed: () => Scaffold.of(context).openDrawer(),
+            ),
+          ),
+        ],
+      ),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            const DrawerHeader(
+              decoration: BoxDecoration(
+                color: Colors.blue,
+              ),
+              child: Text(
+                'Menu',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TelaEstoque(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: estoque.isEmpty && custosOperacionais.isEmpty
           ? const Center(child: Text("Sem dados no stock para analisar."))
@@ -155,16 +214,16 @@ class _TelaDashboardState extends State<TelaDashboard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Custos Operacionais:"),
-                              Text("R\$ ${custosOperacionaisTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                              const Text("Retorno Esperado:"),
+                              Text("R\$ ${valorVendaTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 8),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Retorno Esperado:"),
-                              Text("R\$ ${valorVendaTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                              const Text("Custos Operacionais:"),
+                              Text("R\$ ${custosOperacionaisTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const Divider(height: 30, thickness: 1),
@@ -179,8 +238,8 @@ class _TelaDashboardState extends State<TelaDashboard> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              const Text("Lucro após custos fixos:", style: TextStyle(fontSize: 14)),
-                              Text("R\$ ${lucroAposFixos.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blueGrey, fontSize: 14, fontWeight: FontWeight.bold)),
+                              Text("Lucro após custos (${custoTotal > 0 ? ((lucroAposFixos / custoTotal) * 100).toStringAsFixed(1) : '0.0'}% de lucro):", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              Text("R\$ ${lucroAposFixos.toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue, fontSize: 14, fontWeight: FontWeight.bold)),
                             ],
                           ),
                         ],

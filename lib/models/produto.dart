@@ -5,7 +5,8 @@ class Produto {
   final int quantidade;
   final double valorCompra;
   final double markup; // <-- VOLTOU!
-  final double valorVenda; 
+  final double valorVenda;
+  final String tipoProduto; // Novo campo: 'revendido' ou 'produzido'
 
   Produto({
     required this.codigo,
@@ -14,7 +15,8 @@ class Produto {
     required this.quantidade,
     required this.valorCompra,
     required this.markup,
-    required this.valorVenda, 
+    required this.valorVenda,
+    required this.tipoProduto,
   });
 
   Map<String, dynamic> toJson() => {
@@ -24,7 +26,8 @@ class Produto {
         'quantidade': quantidade,
         'valorCompra': valorCompra,
         'markup': markup,
-        'valorVenda': valorVenda, 
+        'valorVenda': valorVenda,
+        'tipoProduto': tipoProduto,
       };
 
   factory Produto.fromJson(Map<String, dynamic> json) => Produto(
@@ -33,7 +36,8 @@ class Produto {
         lote: json['lote'],
         quantidade: json['quantidade'],
         valorCompra: json['valorCompra'],
-        markup: json['markup'] ?? 2.0, 
-        valorVenda: json['valorVenda'] ?? 0.0, 
+        markup: json['markup'] ?? 2.0,
+        valorVenda: json['valorVenda'] ?? 0.0,
+        tipoProduto: json['tipoProduto'] ?? 'revendido', // Default para compatibilidade
       );
 }
