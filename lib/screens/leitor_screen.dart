@@ -31,6 +31,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
   ); // Lucro de 100% por padrão
   final TextEditingController valorVendaController = TextEditingController();
 
+  String origemSelecionada = 'Revendido';
+  bool margemSegura = true;
+
   List<Produto> bancoDeEstoque = [];
 
   @override
@@ -51,6 +54,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _calcularVendaEmTempoReal() {
     if (valorCompraController.text.isEmpty || markupController.text.isEmpty) {
       valorVendaController.clear();
+      setState(() => margemSegura = true);
       return;
     }
 
@@ -63,6 +67,11 @@ class _LeitorScreenState extends State<LeitorScreen> {
     );
 
     if (custo != null && markup != null) {
+      bool ehSegura = markup >= 1.3;
+      if (ehSegura != margemSegura) {
+        setState(() => margemSegura = ehSegura);
+      }
+
       double venda = custo * markup;
       valorVendaController.text = venda.toStringAsFixed(2).replaceAll('.', ',');
     }
@@ -120,6 +129,16 @@ class _LeitorScreenState extends State<LeitorScreen> {
       return;
     }
 
+    if (!margemSegura) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Ação Bloqueada: Corrija a margem de lucro antes de salvar!"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     int? qtd = int.tryParse(quantidadeController.text);
     String valorTexto = valorCompraController.text
         .replaceAll('.', '')
@@ -154,6 +173,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompra: valor,
       markup: markup,
       valorVenda: valorVenda,
+      origem: origemSelecionada,
     );
 
     await DBHelper.instance.insertProduto(novoProduto);
@@ -180,6 +200,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompraController.clear();
       markupController.text = '2.0';
       valorVendaController.clear();
+      origemSelecionada = 'Revendido';
     });
 
     scannerController.start();
@@ -304,6 +325,31 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   ),
                   const SizedBox(height: 10),
 
+                  // Seletor de Origem
+                  const Text(
+                    "Origem do Produto:",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Radio<String>(
+                        value: 'Revendido',
+                        groupValue: origemSelecionada,
+                        onChanged: (val) => setState(() => origemSelecionada = val!),
+                      ),
+                      const Text('Revendido'),
+                      const SizedBox(width: 20),
+                      Radio<String>(
+                        value: 'Fabricado',
+                        groupValue: origemSelecionada,
+                        onChanged: (val) => setState(() => origemSelecionada = val!),
+                      ),
+                      const Text('Fabricado'),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
                   // Bloco Financeiro do Cintra
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -330,7 +376,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                 inputFormatters: [MoedaFormatter()],
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                  labelText: 'Custo',
+                                  labelText: 'Custo de Estoque',
                                   prefixText: 'R\$ ',
                                 ),
                               ),
@@ -343,13 +389,19 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                   decimal: true,
                                 ),
                                 decoration: const InputDecoration(
-                                  labelText: 'Markup (Ex: 2.0)',
+                                  labelText: 'Margem de Lucro',
+                                  errorText: null, // Será sobrescrito abaixo
                                 ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 10),
+                        if (!margemSegura)
+                          const Padding(
+                            padding: EdgeInsets.only(bottom: 10),
+                            child: Text('⚠️ Risco de Prejuízo: Margem muito baixa!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
                         TextField(
                           controller: valorVendaController,
                           readOnly: true,
@@ -358,7 +410,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                             color: Colors.green,
                           ),
                           decoration: const InputDecoration(
-                            labelText: 'Sugestão de Venda',
+                            labelText: 'Faturamento Projetado (Unidade)',
                             prefixText: 'R\$ ',
                             filled: true,
                             fillColor: Colors.white,

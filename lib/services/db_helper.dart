@@ -5,7 +5,7 @@ import '../models/produto.dart';
 class DBHelper {
   static const _dbName = 'estoque_cic.db';
   // Mudamos a versão para 2 para o app saber que a tabela cresceu
-  static const _dbVersion = 2; 
+  static const _dbVersion = 4; 
   static const _tableName = 'produtos';
 
   DBHelper._();
@@ -40,7 +40,8 @@ class DBHelper {
         quantidade INTEGER NOT NULL,
         valorCompra REAL NOT NULL,
         markup REAL NOT NULL,
-        valorVenda REAL NOT NULL
+        valorVenda REAL NOT NULL,
+        origem TEXT DEFAULT 'Revendido'
       )
     ''');
   }
@@ -50,6 +51,21 @@ class DBHelper {
     if (oldVersion < 2) {
       await db.execute("ALTER TABLE $_tableName ADD COLUMN markup REAL NOT NULL DEFAULT 2.0");
       await db.execute("ALTER TABLE $_tableName ADD COLUMN valorVenda REAL NOT NULL DEFAULT 0.0");
+    }
+    if (oldVersion < 3) {
+      await db.execute("ALTER TABLE $_tableName ADD COLUMN origem TEXT DEFAULT 'Revendido'");
+    }
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE ficha_tecnica (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          id_produto_fabricado TEXT NOT NULL,
+          id_insumo_revendido TEXT NOT NULL,
+          quantidade_usada REAL NOT NULL,
+          FOREIGN KEY (id_produto_fabricado) REFERENCES produtos (codigo),
+          FOREIGN KEY (id_insumo_revendido) REFERENCES produtos (codigo)
+        )
+      ''');
     }
   }
 

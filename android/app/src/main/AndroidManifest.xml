@@ -3,6 +3,7 @@
 
     <!-- Permissão de câmera -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <!-- Declara que o app pode usar câmera, mas não é obrigatório -->
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
