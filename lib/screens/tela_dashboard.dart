@@ -148,6 +148,23 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
+  Widget _buildResumoCard(String titulo, double valor, Color corIcone, IconData icone) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        leading: CircleAvatar(
+          backgroundColor: corIcone.withOpacity(0.1),
+          radius: 25,
+          child: Icon(icone, color: corIcone, size: 28),
+        ),
+        title: Text(titulo, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w600)),
+        subtitle: Text("R\$ ${valor.toStringAsFixed(2)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900)),
+      ),
+    );
+  }
+
   Widget _buildAbaVisaoGeral() {
     double custoTotal = 0, vendaTotal = 0;
     for (var p in estoque) {
@@ -157,25 +174,19 @@ class _TelaDashboardState extends State<TelaDashboard> {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Card(
-            elevation: 4,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  const Text("Resumo Financeiro Global", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 15),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Custo Investido:"), Text("R\$ ${custoTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))]),
-                  const SizedBox(height: 8),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Faturamento Projetado:"), Text("R\$ ${vendaTotal.toStringAsFixed(2)}", style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold))]),
-                  const Divider(height: 30),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("Lucro Bruto:", style: TextStyle(fontWeight: FontWeight.bold)), Text("R\$ ${(vendaTotal - custoTotal).toStringAsFixed(2)}", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold))]),
-                ],
-              ),
-            ),
-          ),
+          const Text("Resumo Financeiro Global", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          const SizedBox(height: 8),
+          const Text("Acompanhe o capital total investido e o retorno projetado de todo o seu inventário.", style: TextStyle(fontSize: 14, color: Colors.grey)),
+          const SizedBox(height: 24),
+          _buildResumoCard("Custo Investido", custoTotal, Colors.redAccent, Icons.shopping_bag_outlined),
+          const SizedBox(height: 12),
+          _buildResumoCard("Faturamento Projetado", vendaTotal, Colors.green, Icons.point_of_sale),
+          const SizedBox(height: 12),
+          _buildResumoCard("Lucro Bruto Sugerido", vendaTotal - custoTotal, Colors.blueAccent, Icons.trending_up),
+          const SizedBox(height: 30),
+          const Center(child: Text("Navegue pelas abas acima para gráficos e Inteligência Artificial.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12))),
         ],
       ),
     );
@@ -219,18 +230,35 @@ class _TelaDashboardState extends State<TelaDashboard> {
           buildStackedBarChartCard(estoque),
           const SizedBox(height: 20),
           buildLineChartCard(estoque),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 15, runSpacing: 10,
-            children: [
-              _buildFilterDropdown("Origem", _filtroOrigem, ['Todos', 'Fabricado', 'Revendido'], (v) => setState(() => _filtroOrigem = v!)),
-              _buildFilterDropdown("Margem", _filtroMargem, ['Todos', '> 30%', '<= 30%'], (v) => setState(() => _filtroMargem = v!)),
-              _buildFilterDropdown("Estoque", _filtroQtd, ['Todos', 'Baixo (<5)', 'Normal (>=5)'], (v) => setState(() => _filtroQtd = v!)),
-            ],
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 30),
+          const Text("Tabela Analítica (Detalhamento)", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          const SizedBox(height: 10),
           Card(
-            elevation: 4, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 2,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Filtros de Tabela", style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 15, runSpacing: 10,
+                    children: [
+                      _buildFilterDropdown("Origem", _filtroOrigem, ['Todos', 'Fabricado', 'Revendido'], (v) => setState(() => _filtroOrigem = v!)),
+                      _buildFilterDropdown("Margem", _filtroMargem, ['Todos', '> 30%', '<= 30%'], (v) => setState(() => _filtroMargem = v!)),
+                      _buildFilterDropdown("Estoque", _filtroQtd, ['Todos', 'Baixo (<5)', 'Normal (>=5)'], (v) => setState(() => _filtroQtd = v!)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            elevation: 2, color: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
@@ -316,13 +344,27 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 ? const SizedBox.shrink()
                 : SingleChildScrollView(
                     child: Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+                        border: Border.all(color: Colors.teal.shade100),
+                        boxShadow: [BoxShadow(color: Colors.teal.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
                       ),
-                      child: MarkdownBody(data: _analiseIA!),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.check_circle, color: Colors.teal, size: 20),
+                              SizedBox(width: 8),
+                              Text("Relatório Gerado com Sucesso", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                            ],
+                          ),
+                          const Divider(height: 30),
+                          MarkdownBody(data: _analiseIA!),
+                        ],
+                      ),
                     ),
                   ),
           ),

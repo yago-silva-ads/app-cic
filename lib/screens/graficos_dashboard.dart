@@ -8,12 +8,19 @@ const Color pbiTeal = Color(0xFF00B8AA);
 const Color pbiOrange = Color(0xFFE66C37);
 const Color pbiPurple = Color(0xFF6B007B);
 
-Widget _buildHeader(String title) {
-  return Row(
+Widget _buildHeader(String title, String subtitle) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Container(width: 4, height: 16, color: pbiBlue1),
-      const SizedBox(width: 8),
-      Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+      Row(
+        children: [
+          Container(width: 4, height: 16, color: pbiBlue1),
+          const SizedBox(width: 8),
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+        ],
+      ),
+      const SizedBox(height: 4),
+      Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.black54)),
     ],
   );
 }
@@ -48,7 +55,7 @@ Widget buildPieChartCard(List<Produto> estoque) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader("Composição do Estoque (Origem)"),
+          _buildHeader("Composição do Estoque", "Quantidade de itens físicos separados por origem de aquisição."),
           const SizedBox(height: 24),
           SizedBox(
             height: 200,
@@ -118,7 +125,7 @@ Widget buildStackedBarChartCard(List<Produto> estoque) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader("Margem por Categoria (R\$)"),
+          _buildHeader("Margem por Categoria (R\$)", "Comparativo entre Custo Investido e Lucro Potencial de Venda."),
           const SizedBox(height: 24),
           SizedBox(
             height: 220,
@@ -236,7 +243,7 @@ Widget buildLineChartCard(List<Produto> estoque) {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildHeader("Evolução Custo vs Lucro (Por Item)"),
+          _buildHeader("Evolução Custo vs Lucro", "Curva de lucro de cada produto no estoque ordenado pelo custo de compra."),
           const SizedBox(height: 24),
           SizedBox(
             height: 200,
