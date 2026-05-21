@@ -8,6 +8,7 @@ import '../services/db_helper.dart';
 import '../services/api_service.dart';
 import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
+import 'tela_vendedor.dart';
 
 class LeitorScreen extends StatefulWidget {
   const LeitorScreen({super.key});
@@ -18,8 +19,11 @@ class LeitorScreen extends StatefulWidget {
 class _LeitorScreenState extends State<LeitorScreen> {
   String codigoLido = 'A aguardar leitura...';
   bool buscando = false;
+  bool _alertaMargem = false; // Controle do Limitador Anti-Falência
 
-  final MobileScannerController scannerController = MobileScannerController();
+  final MobileScannerController scannerController = MobileScannerController(
+    formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8],
+  );
 
   final TextEditingController nomeController = TextEditingController();
   final TextEditingController loteController = TextEditingController();
@@ -31,8 +35,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   ); // Lucro de 100% por padrão
   final TextEditingController valorVendaController = TextEditingController();
 
-  String origemSelecionada = 'Revendido';
-  bool margemSegura = true;
+  String tipoProdutoSelecionado = 'Revendido';
 
   List<Produto> bancoDeEstoque = [];
 
@@ -54,7 +57,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _calcularVendaEmTempoReal() {
     if (valorCompraController.text.isEmpty || markupController.text.isEmpty) {
       valorVendaController.clear();
-      setState(() => margemSegura = true);
+      setState(() {
+        _alertaMargem = false;
+      });
       return;
     }
 
@@ -67,13 +72,13 @@ class _LeitorScreenState extends State<LeitorScreen> {
     );
 
     if (custo != null && markup != null) {
-      bool ehSegura = markup >= 1.3;
-      if (ehSegura != margemSegura) {
-        setState(() => margemSegura = ehSegura);
-      }
-
       double venda = custo * markup;
       valorVendaController.text = venda.toStringAsFixed(2).replaceAll('.', ',');
+
+      // Ativa o alerta se a margem for menor que 1.3
+      setState(() {
+        _alertaMargem = markup < 1.3;
+      });
     }
   }
 
@@ -82,10 +87,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
     setState(() {
       bancoDeEstoque = produtos;
     });
-  }
-
-  void _atualizarTela() {
-    _carregarDados();
   }
 
   Future<void> validarGS1(String code) async {
@@ -129,16 +130,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
       return;
     }
 
-    if (!margemSegura) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Ação Bloqueada: Corrija a margem de lucro antes de salvar!"),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     int? qtd = int.tryParse(quantidadeController.text);
     String valorTexto = valorCompraController.text
         .replaceAll('.', '')
@@ -153,16 +144,57 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorVendaController.text.replaceAll('.', '').replaceAll(',', '.'),
     );
 
-    if (qtd == null || valor == null || valorVenda == null || markup == null) {
+    if (qtd == null || valor == null || valorVenda == null || markup == null ||
+        qtd <= 0 || valor <= 0 || markup <= 0 || valorVenda <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Erro: Verifique a quantidade e os valores!"),
+            content: Text("Erro: Valores numéricos não podem estar vazios ou zerados!"),
             backgroundColor: Colors.red,
           ),
         );
       }
       return;
+    }
+
+    // Confirmação Dupla Anti-Falência
+    if (_alertaMargem) {
+      bool confirmar =
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text(
+                    "Risco de Prejuízo",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
+              content: const Text(
+                "A margem de lucro definida é muito baixa. Isso pode não ser suficiente para cobrir seus custos fixos. Deseja salvar este produto mesmo assim?",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text("Cancelar"),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text(
+                    "Salvar mesmo assim",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+
+      if (!confirmar) return; // Cancela o salvamento se o usuário não confirmar
     }
 
     Produto novoProduto = Produto(
@@ -173,7 +205,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompra: valor,
       markup: markup,
       valorVenda: valorVenda,
-      origem: origemSelecionada,
+      origem:
+          tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
     );
 
     await DBHelper.instance.insertProduto(novoProduto);
@@ -200,7 +233,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompraController.clear();
       markupController.text = '2.0';
       valorVendaController.clear();
-      origemSelecionada = 'Revendido';
+      tipoProdutoSelecionado = 'Revendido';
+      _alertaMargem = false;
     });
 
     scannerController.start();
@@ -209,29 +243,70 @@ class _LeitorScreenState extends State<LeitorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Leitor CIC 2026'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.pie_chart),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const TelaDashboard()),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.list),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TelaEstoque(
-                  estoque: bancoDeEstoque,
-                  onUpdate: _atualizarTela,
+      appBar: AppBar(title: const Text('Leitor CIC 2026')),
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(color: Color(0xFF1565C0)),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const TelaDashboard(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaEstoque()),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
+                );
+              },
+            ),
+          ],
+        ),
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -241,11 +316,23 @@ class _LeitorScreenState extends State<LeitorScreen> {
               child: MobileScanner(
                 controller: scannerController,
                 onDetect: (cap) {
-                  final code = cap.barcodes.first.rawValue ?? "";
+                  if (cap.barcodes.isEmpty) return;
+                  final barcode = cap.barcodes.first;
+                  final code = barcode.rawValue ?? "";
 
                   if (codigoLido == 'A aguardar leitura...') {
                     setState(() => codigoLido = code);
                     scannerController.stop();
+                    
+                    if (barcode.format == BarcodeFormat.qrCode) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Formato QR Code reconhecido com sucesso"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                    
                     validarGS1(code);
                   }
                 },
@@ -254,13 +341,11 @@ class _LeitorScreenState extends State<LeitorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 👇 BOTÃO DO FLASH ADICIONADO AQUI!
                 IconButton(
                   onPressed: () => scannerController.toggleTorch(),
                   icon: const Icon(Icons.flashlight_on, color: Colors.amber),
                   tooltip: 'Ligar/Desligar Flash',
                 ),
-
                 TextButton.icon(
                   onPressed: () {
                     setState(() => codigoLido = "7891721201806");
@@ -280,7 +365,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
                 ),
               ],
             ),
-
             if (buscando) const LinearProgressIndicator(),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -301,13 +385,34 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-
+                  DropdownButtonFormField<String>(
+                    initialValue: tipoProdutoSelecionado,
+                    decoration: const InputDecoration(
+                      labelText: 'Tipo de Produto',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                      value: 'Revendido',
+                        child: Text('Revendido'),
+                      ),
+                      DropdownMenuItem(
+                      value: 'Fabricado',
+                      child: Text('Fabricado'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        tipoProdutoSelecionado = value!;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: loteController,
-                          decoration: const InputDecoration(labelText: 'Lote'),
+                          decoration: const InputDecoration(labelText: 'Lote de Fabricação'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -318,53 +423,35 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-                          decoration: const InputDecoration(labelText: 'Qtd'),
+                          decoration: const InputDecoration(
+                            labelText: 'Quantidade em Estoque',
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
-                  // Seletor de Origem
-                  const Text(
-                    "Origem do Produto:",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Radio<String>(
-                        value: 'Revendido',
-                        groupValue: origemSelecionada,
-                        onChanged: (val) => setState(() => origemSelecionada = val!),
-                      ),
-                      const Text('Revendido'),
-                      const SizedBox(width: 20),
-                      Radio<String>(
-                        value: 'Fabricado',
-                        groupValue: origemSelecionada,
-                        onChanged: (val) => setState(() => origemSelecionada = val!),
-                      ),
-                      const Text('Fabricado'),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Bloco Financeiro do Cintra
+                  // Bloco Financeiro do Cintra (Com Alerta de Margem)
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: _alertaMargem
+                          ? Colors.red.withOpacity(0.05)
+                          : Colors.blue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
+                      border: _alertaMargem
+                          ? Border.all(color: Colors.red, width: 1.5)
+                          : null,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           "Precificação (Cintra)",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                            color: _alertaMargem ? Colors.red : Colors.blue,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -376,7 +463,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                 inputFormatters: [MoedaFormatter()],
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                  labelText: 'Custo de Estoque',
+                                  labelText: 'Custo Unitário (R\$)',
                                   prefixText: 'R\$ ',
                                 ),
                               ),
@@ -385,35 +472,51 @@ class _LeitorScreenState extends State<LeitorScreen> {
                             Expanded(
                               child: TextField(
                                 controller: markupController,
-                                keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: 'Margem de Lucro',
-                                  errorText: null, // Será sobrescrito abaixo
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                decoration: InputDecoration(
+                                  labelText: 'Margem de Lucro (Markup)',
+                                  enabledBorder: _alertaMargem
+                                      ? const UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.red,
+                                          ),
+                                        )
+                                      : null,
                                 ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        if (!margemSegura)
+                        if (_alertaMargem)
                           const Padding(
-                            padding: EdgeInsets.only(bottom: 10),
-                            child: Text('⚠️ Risco de Prejuízo: Margem muito baixa!', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12)),
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "⚠️ Risco de Prejuízo: Margem muito baixa para cobrir custos fixos!",
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
                           ),
+                        const SizedBox(height: 10),
                         TextField(
                           controller: valorVendaController,
                           readOnly: true,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.green,
+                            color: _alertaMargem ? Colors.red : Colors.green,
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'Faturamento Projetado (Unidade)',
+                          decoration: InputDecoration(
+                            labelText: 'Preço de Venda Sugerido (R\$)',
                             prefixText: 'R\$ ',
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: _alertaMargem
+                                ? Colors.red.shade50
+                                : Colors.white,
                           ),
                         ),
                       ],
@@ -425,8 +528,14 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     onPressed: salvar,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
+                      backgroundColor: _alertaMargem ? Colors.red : null,
+                      foregroundColor: _alertaMargem ? Colors.white : null,
                     ),
-                    child: const Text("Salvar no Banco de Dados"),
+                    child: Text(
+                      _alertaMargem
+                          ? "ATENÇÃO: Salvar com Risco"
+                          : "Salvar no Banco de Dados",
+                    ),
                   ),
                 ],
               ),

@@ -41,8 +41,9 @@ Widget buildPieChartCard(List<Produto> estoque) {
   int qtdRevendido = 0;
   int qtdFabricado = 0;
   for (var p in estoque) {
-    if (p.origem == 'Revendido') qtdRevendido += p.quantidade;
-    if (p.origem == 'Fabricado') qtdFabricado += p.quantidade;
+    String o = p.origem.toLowerCase();
+    if (o == 'revendido') qtdRevendido += p.quantidade;
+    if (o == 'fabricado' || o == 'produzido') qtdFabricado += p.quantidade;
   }
 
   return Card(
@@ -106,10 +107,11 @@ Widget buildStackedBarChartCard(List<Produto> estoque) {
   double custoFabricado = 0, lucroFabricado = 0;
 
   for (var p in estoque) {
-    if (p.origem == 'Revendido') {
+    String o = p.origem.toLowerCase();
+    if (o == 'revendido') {
       custoRevendido += p.valorCompra * p.quantidade;
       lucroRevendido += (p.valorVenda - p.valorCompra) * p.quantidade;
-    } else if (p.origem == 'Fabricado') {
+    } else if (o == 'fabricado' || o == 'produzido') {
       custoFabricado += p.valorCompra * p.quantidade;
       lucroFabricado += (p.valorVenda - p.valorCompra) * p.quantidade;
     }

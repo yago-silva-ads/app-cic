@@ -1,7 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'screens/leitor_screen.dart'; // Importa a tela principal
 
-void main() {
+Future<void> main() async {
+  // Garante que os widgets do Flutter estejam prontos
+  WidgetsFlutterBinding.ensureInitialized(); 
+  // Carrega a chave de API antes do App iniciar
+  await dotenv.load(fileName: ".env"); 
+
   runApp(const MyApp());
 }
 

@@ -2,19 +2,50 @@ import 'package:flutter/material.dart';
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
 import '../services/db_helper.dart';
+import 'leitor_screen.dart';
+import 'tela_dashboard.dart';
+import 'tela_vendedor.dart';
 
 class TelaEstoque extends StatefulWidget {
-  final List<Produto> estoque;
-  final VoidCallback onUpdate;
-  const TelaEstoque({super.key, required this.estoque, required this.onUpdate});
+  final List<Produto>? estoque;
+  final VoidCallback? onUpdate;
+  const TelaEstoque({super.key, this.estoque, this.onUpdate});
 
   @override
   State<TelaEstoque> createState() => _TelaEstoqueState();
 }
 
 class _TelaEstoqueState extends State<TelaEstoque> {
+  List<Produto> estoqueLocal = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarEstoque();
+  }
+
+  Future<void> _carregarEstoque() async {
+    if (widget.estoque != null) {
+      setState(() {
+        estoqueLocal = widget.estoque!;
+      });
+    } else {
+      final produtos = await DBHelper.instance.getEstoque();
+      setState(() {
+        estoqueLocal = produtos;
+      });
+    }
+  }
+
+  void _onUpdate() {
+    _carregarEstoque();
+    if (widget.onUpdate != null) {
+      widget.onUpdate!();
+    }
+  }
+
   void _edit(int index) {
-    Produto p = widget.estoque[index];
+    Produto p = estoqueLocal[index];
     TextEditingController n = TextEditingController(text: p.nome);
     TextEditingController q = TextEditingController(
       text: p.quantidade.toString(),
@@ -28,6 +59,7 @@ class _TelaEstoqueState extends State<TelaEstoque> {
     TextEditingController vendaCtrl = TextEditingController(
       text: p.valorVenda.toStringAsFixed(2).replaceAll('.', ','),
     );
+    String tipoSelecionado = (p.origem.toLowerCase() == 'fabricado' || p.origem.toLowerCase() == 'produzido') ? 'Fabricado' : 'Revendido';
 
     showDialog(
       context: context,
@@ -60,18 +92,18 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                 children: [
                   TextField(
                     controller: n,
-                    decoration: const InputDecoration(labelText: "Nome"),
+                    decoration: const InputDecoration(labelText: "Nome do Produto"),
                   ),
                   TextField(
                     controller: q,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Qtd"),
+                    decoration: const InputDecoration(labelText: "Quantidade em Estoque"),
                   ),
                   TextField(
                     controller: custoCtrl,
                     inputFormatters: [MoedaFormatter()],
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: "Custo"),
+                    decoration: const InputDecoration(labelText: "Custo Unitário (R\$)"),
                     onChanged: (_) =>
                         recalcularVenda(), // Chama o cálculo ao digitar
                   ),
@@ -81,11 +113,31 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                       decimal: true,
                     ),
                     decoration: InputDecoration(
-                      labelText: "Markup (Ex: 2.0)",
+                      labelText: "Margem de Lucro (Markup)",
                       errorText: margemSeguraModal ? null : '⚠️ Margem muito baixa!',
                     ),
                     onChanged: (_) =>
                         recalcularVenda(), 
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: tipoSelecionado,
+                    decoration: const InputDecoration(
+                      labelText: 'Origem do Produto',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Revendido',
+                        child: Text('Revendido'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Fabricado',
+                        child: Text('Fabricado'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setStateModal(() => tipoSelecionado = value!);
+                    },
                   ),
                   const SizedBox(height: 10),
                   TextField(
@@ -96,7 +148,7 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                       color: Colors.green,
                     ),
                     decoration: const InputDecoration(
-                      labelText: "Sugestão de Venda",
+                      labelText: "Preço de Venda Sugerido (R\$)",
                       filled: true,
                     ),
                   ),
@@ -120,28 +172,36 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                     return;
                   }
 
+                  int? parsedQtd = int.tryParse(q.text);
+                  double? parsedCusto = double.tryParse(custoCtrl.text.replaceAll('.', '').replaceAll(',', '.'));
+                  double? parsedMarkup = double.tryParse(markupCtrl.text.replaceAll(',', '.'));
+                  double? parsedVenda = double.tryParse(vendaCtrl.text.replaceAll('.', '').replaceAll(',', '.'));
+
+                  if (parsedQtd == null || parsedCusto == null || parsedMarkup == null || parsedVenda == null ||
+                      parsedQtd <= 0 || parsedCusto <= 0 || parsedMarkup <= 0 || parsedVenda <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Erro: Valores numéricos não podem estar vazios ou zerados!"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                    return;
+                  }
+
                   Produto produtoAtualizado = Produto(
                     codigo: p.codigo,
                     nome: n.text,
                     lote: p.lote,
-                    quantidade: int.parse(q.text),
-                    valorCompra: double.parse(
-                      custoCtrl.text.replaceAll('.', '').replaceAll(',', '.'),
-                    ),
-                    markup: double.parse(markupCtrl.text.replaceAll(',', '.')),
-                    valorVenda: double.parse(
-                      vendaCtrl.text.replaceAll('.', '').replaceAll(',', '.'),
-                    ),
-                    origem: p.origem,
+                    quantidade: parsedQtd,
+                    valorCompra: parsedCusto,
+                    markup: parsedMarkup,
+                    valorVenda: parsedVenda,
+                    origem: tipoSelecionado,
                   );
 
                   await DBHelper.instance.insertProduto(produtoAtualizado);
 
-                  setState(() {
-                    widget.estoque[index] = produtoAtualizado;
-                  });
-
-                  widget.onUpdate();
+                  _onUpdate();
                   if (mounted) Navigator.pop(ctx);
                 },
                 child: const Text("Salvar"),
@@ -157,16 +217,82 @@ class _TelaEstoqueState extends State<TelaEstoque> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Estoque Atual")),
-      body: widget.estoque.isEmpty
+      drawer: Drawer(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            SizedBox(
+              height: MediaQuery.sizeOf(context).height * 0.1,
+              child: DrawerHeader(
+                margin: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                decoration: const BoxDecoration(color: Color(0xFF1565C0)),
+                child: const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Menu',
+                    style: TextStyle(color: Colors.white, fontSize: 20),
+                  ),
+                ),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.home),
+              title: const Text('Página Inicial'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LeitorScreen()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart),
+              title: const Text('Dashboard Inteligente'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaDashboard()));
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.list),
+              title: const Text('Estoque Atual'),
+              onTap: () {
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.attach_money),
+              title: const Text('Custos Operacionais'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
+              },
+            ),
+          ],
+        ),
+      ),
+      body: estoqueLocal.isEmpty
           ? const Center(child: Text("Estoque vazio."))
           : ListView.builder(
-              itemCount: widget.estoque.length,
+              itemCount: estoqueLocal.length,
               itemBuilder: (ctx, i) {
-                final p = widget.estoque[i];
+                final p = estoqueLocal[i];
                 final lucroUnid = p.valorVenda - p.valorCompra;
-                final isFabricado = p.origem == 'Fabricado';
-
-                return Card(
+                final isFabricado = p.origem.toLowerCase() == 'fabricado' || p.origem.toLowerCase() == 'produzido';
+                return Dismissible(
+                  key: Key('${p.codigo}_$i'),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (_) async {
+                    await DBHelper.instance.deleteProduto(p.codigo);
+                    _onUpdate();
+                  },
+                  background: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(12)),
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: Card(
                   elevation: 4,
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -210,15 +336,6 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                               children: [
                                 IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _edit(i), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
                                 const SizedBox(width: 16),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  constraints: const BoxConstraints(), padding: EdgeInsets.zero,
-                                  onPressed: () async {
-                                    await DBHelper.instance.deleteProduto(p.codigo);
-                                    setState(() => widget.estoque.removeAt(i));
-                                    widget.onUpdate();
-                                  },
-                                ),
                               ],
                             ),
                             Text("Lucro Unid: R\$ ${lucroUnid.toStringAsFixed(2).replaceAll('.', ',')}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
@@ -227,7 +344,8 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                       ],
                     ),
                   ),
-                );
+              ),
+            );
               },
             ),
     );

@@ -1,82 +1,51 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/produto.dart';
 
 class IaService {
-  //  FIM DA BUROCRACIA: Pollinations AI (Livre, Open-Source, SEM CHAVE, SEM BLOQUEIO)
-  // Essa API pública processa a requisição imediatamente e devolve o texto pronto.
-  static const _url = "https://text.pollinations.ai/";
+  // Busca a chave de forma segura no cofre do .env:
+  static String get _apiKey => dotenv.env['GEMINI_API_KEY'] ?? '';
 
   static Future<String> analisarEstoque(List<Produto> estoque) async {
-    if (estoque.isEmpty) return "Seu estoque está vazio.";
+    if (estoque.isEmpty) {
+      return "O seu estoque está vazio. Adicione produtos para gerar uma análise.";
+    }
+    
+    if (_apiKey.isEmpty) {
+      return "⚠️ ERRO: Chave da API não encontrada no arquivo .env.";
+    }
+
     try {
-      print('\n=========================================');
-      print('🚀 IA DE VERDADE INICIADA (POLLINATIONS)!');
-      print('=========================================\n');
+      final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
 
       final buffer = StringBuffer();
-      for (var p in estoque.take(10)) {
-        buffer.writeln("- ${p.nome}: Qtd ${p.quantidade}, Compra R\$${p.valorCompra}, Venda R\$${p.valorVenda}");
+      buffer.writeln("Você é um Consultor Financeiro de Varejo. Analise o estoque abaixo e dê 3 insights estratégicos curtos (em bullet points com emojis) sobre capital parado, oportunidades de lucro e risco. Seja direto.\n");
+
+      for (var p in estoque.take(15)) {
+        buffer.writeln("- ${p.nome}: Qtd ${p.quantidade}, Custo R\$${p.valorCompra}, Venda R\$${p.valorVenda}");
       }
 
-      print('DEBUG IA: Enviando dados do estoque...');
-      
-      final response = await http.post(
-        Uri.parse(_url),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "messages": [
-            {"role": "system", "content": "Você é um consultor financeiro. Responda em português do Brasil. Analise o estoque e gere 3 insights estratégicos sobre margem, giro e risco. NÃO use tabelas ou matrizes. Use apenas tópicos curtos (bullet points) com emojis."},
-            {"role": "user", "content": buffer.toString()}
-          ],
-          "model": "openai" // Usa modelos avançados de graça
-        }),
-      ).timeout(const Duration(seconds: 15));
-
-      if (response.statusCode == 200) {
-        print('DEBUG IA: Sucesso Absoluto!');
-        // A API livre não tem JSON complexo com frescura, devolve o texto puro no body!
-        return response.body.trim();
-      }
-      
-      return "Erro do Servidor (Status ${response.statusCode}):\n${response.body}";
+      final response = await model.generateContent([Content.text(buffer.toString())]);
+      return response.text ?? "Análise concluída, mas sem texto retornado.";
     } catch (e) {
-      print('ERRO FATAL IA: $e');
-      return "Erro de conexão:\n$e";
+      return "❌ ERRO DE LIGAÇÃO INTERNA: O emulador/telemóvel está sem internet ou bloqueou o pedido. Detalhe: $e";
     }
   }
 
   static Future<String> analisarProduto(Produto produto) async {
+    if (_apiKey.isEmpty) {
+      return "⚠️ ERRO: Chave da API não encontrada no arquivo .env.";
+    }
+
     try {
-      print('\n=========================================');
-      print('🚀 IA DE VERDADE INICIADA PARA PRODUTO!');
-      print('=========================================\n');
+      final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
 
-      final prompt = "Analise o produto ${produto.nome} (Qtd ${produto.quantidade}, Compra R\$${produto.valorCompra}, Venda R\$${produto.valorVenda}) e gere insights curtos sobre margem e risco em formato Markdown.";
-      
-      print('DEBUG IA: Analisando produto...');
-      
-      final response = await http.post(
-        Uri.parse(_url),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "messages": [
-            {"role": "system", "content": "Você é um consultor financeiro especialista. Responda em português. Gere um resumo em tópicos com emojis. NÃO crie tabelas e nem matrizes."},
-            {"role": "user", "content": prompt}
-          ],
-          "model": "openai"
-        }),
-      ).timeout(const Duration(seconds: 15));
+      final prompt = "Analise rapidamente o produto ${produto.nome} (Qtd ${produto.quantidade}, Custo R\$${produto.valorCompra}, Venda R\$${produto.valorVenda}) e gere insights curtos em tópicos sobre margem e risco.";
 
-      if (response.statusCode == 200) {
-        print('DEBUG IA: Sucesso Absoluto!');
-        return response.body.trim();
-      }
-      
-      return "Erro do Servidor (Status ${response.statusCode}):\n${response.body}";
+      final response = await model.generateContent([Content.text(prompt)]);
+      return response.text ?? "Análise concluída, mas sem texto retornado.";
     } catch (e) {
-      print('ERRO FATAL IA PRODUTO: $e');
-      return "Erro de conexão:\n$e";
+      return "❌ ERRO DE LIGAÇÃO INTERNA: $e";
     }
   }
 }

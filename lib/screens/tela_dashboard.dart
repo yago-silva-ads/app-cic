@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/produto.dart';
+import '../models/custo_operacional.dart';
 import '../services/db_helper.dart';
 import '../services/ia_service.dart';
 import 'graficos_dashboard.dart';
+import 'leitor_screen.dart';
+import 'tela_estoque.dart';
+import 'tela_vendedor.dart';
 
 class TelaDashboard extends StatefulWidget {
   const TelaDashboard({super.key});
@@ -14,6 +18,7 @@ class TelaDashboard extends StatefulWidget {
 
 class _TelaDashboardState extends State<TelaDashboard> {
   List<Produto> estoque = [];
+  List<CustoOperacional> custosOperacionais = [];
   bool _isAnalyzing = false;
   String? _analiseIA;
 
@@ -30,11 +35,17 @@ class _TelaDashboardState extends State<TelaDashboard> {
   }
 
   Future<void> _carregarDados() async {
-    final dados = await DBHelper.instance.getEstoque();
+    try {
+      final dados = await DBHelper.instance.getEstoque();
+      final custos = await DBHelper.instance.getCustosOperacionais();
 
-    setState(() {
-      estoque = dados;
-    });
+      setState(() {
+        estoque = dados;
+        custosOperacionais = custos;
+      });
+    } catch (e) {
+      // Silenciar para não quebrar a tela
+    }
   }
 
   Future<void> _gerarAnaliseInteligente() async {
@@ -43,12 +54,18 @@ class _TelaDashboardState extends State<TelaDashboard> {
       _analiseIA = null;
     });
 
-    String resposta = await IaService.analisarEstoque(estoque);
-
-    setState(() {
-      _analiseIA = resposta;
-      _isAnalyzing = false;
-    });
+    try {
+      String resposta = await IaService.analisarEstoque(estoque);
+      setState(() {
+        _analiseIA = resposta;
+        _isAnalyzing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _analiseIA = "ERRO_OFFLINE";
+        _isAnalyzing = false;
+      });
+    }
   }
 
   List<Produto> get _filteredEstoque {
@@ -122,7 +139,12 @@ class _TelaDashboardState extends State<TelaDashboard> {
       ),
     );
 
-    String insight = await IaService.analisarProduto(p);
+    String insight;
+    try {
+      insight = await IaService.analisarProduto(p);
+    } catch (e) {
+      insight = "ERRO_OFFLINE";
+    }
 
     if (!mounted) return;
     Navigator.pop(context);
@@ -140,7 +162,20 @@ class _TelaDashboardState extends State<TelaDashboard> {
             children: [
               Text("Análise: ${p.nome}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal)),
               const Divider(),
-              Expanded(child: SingleChildScrollView(controller: controller, child: MarkdownBody(data: insight))),
+              Expanded(
+                child: insight == "ERRO_OFFLINE"
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.wifi_off_rounded, size: 64, color: Colors.blueGrey.shade300),
+                          const SizedBox(height: 16),
+                          Text("Modo Offline: Verifique sua conexão para gerar análises inteligentes", textAlign: TextAlign.center, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade700)),
+                        ],
+                      ),
+                    )
+                  : SingleChildScrollView(controller: controller, child: MarkdownBody(data: insight)),
+              ),
             ],
           ),
         ),
@@ -171,6 +206,12 @@ class _TelaDashboardState extends State<TelaDashboard> {
       custoTotal += p.quantidade * p.valorCompra;
       vendaTotal += p.quantidade * p.valorVenda;
     }
+    double custosFixos = 0;
+    for (var c in custosOperacionais) {
+      custosFixos += c.valor;
+    }
+    double lucroBruto = vendaTotal - custoTotal;
+    double lucroLiquido = lucroBruto - custosFixos;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -180,11 +221,15 @@ class _TelaDashboardState extends State<TelaDashboard> {
           const SizedBox(height: 8),
           const Text("Acompanhe o capital total investido e o retorno projetado de todo o seu inventário.", style: TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 24),
-          _buildResumoCard("Custo Investido", custoTotal, Colors.redAccent, Icons.shopping_bag_outlined),
+          _buildResumoCard("Custo do Estoque", custoTotal, Colors.redAccent, Icons.shopping_bag_outlined),
+          const SizedBox(height: 12),
+          _buildResumoCard("Custos Operacionais", custosFixos, Colors.orange, Icons.money_off),
           const SizedBox(height: 12),
           _buildResumoCard("Faturamento Projetado", vendaTotal, Colors.green, Icons.point_of_sale),
           const SizedBox(height: 12),
-          _buildResumoCard("Lucro Bruto Sugerido", vendaTotal - custoTotal, Colors.blueAccent, Icons.trending_up),
+          _buildResumoCard("Lucro Bruto", lucroBruto, Colors.blueAccent, Icons.trending_up),
+          const SizedBox(height: 12),
+          _buildResumoCard("Saldo Operacional", lucroLiquido, Colors.teal, Icons.account_balance_wallet),
           const SizedBox(height: 30),
           const Center(child: Text("Navegue pelas abas acima para gráficos e Inteligência Artificial.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12))),
         ],
@@ -342,31 +387,51 @@ class _TelaDashboardState extends State<TelaDashboard> {
           Expanded(
             child: _analiseIA == null
                 ? const SizedBox.shrink()
-                : SingleChildScrollView(
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.teal.shade100),
-                        boxShadow: [BoxShadow(color: Colors.teal.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: const [
-                              Icon(Icons.check_circle, color: Colors.teal, size: 20),
-                              SizedBox(width: 8),
-                              Text("Relatório Gerado com Sucesso", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                : _analiseIA == "ERRO_OFFLINE"
+                    ? Card(
+                        elevation: 0,
+                        color: Colors.transparent,
+                        child: Padding(
+                          padding: const EdgeInsets.all(24.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.wifi_off_rounded, size: 64, color: Colors.blueGrey.shade300),
+                              const SizedBox(height: 16),
+                              Text(
+                                "Modo Offline: Verifique sua conexão para gerar análises inteligentes",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade700),
+                              ),
                             ],
                           ),
-                          const Divider(height: 30),
-                          MarkdownBody(data: _analiseIA!),
-                        ],
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        child: Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.teal.shade100),
+                            boxShadow: [BoxShadow(color: Colors.teal.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: const [
+                                  Icon(Icons.check_circle, color: Colors.teal, size: 20),
+                                  SizedBox(width: 8),
+                                  Text("Relatório Gerado com Sucesso", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
+                                ],
+                              ),
+                              const Divider(height: 30),
+                              MarkdownBody(data: _analiseIA!),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
           ),
         ],
       ),
@@ -390,6 +455,62 @@ class _TelaDashboardState extends State<TelaDashboard> {
               Tab(icon: Icon(Icons.dashboard), text: "Visão Geral"),
               Tab(icon: Icon(Icons.table_chart), text: "Análise BI"),
               Tab(icon: Icon(Icons.auto_awesome), text: "Consultor IA"),
+            ],
+          ),
+        ),
+        drawer: Drawer(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              SizedBox(
+                height: MediaQuery.sizeOf(context).height * 0.1,
+                child: DrawerHeader(
+                  margin: EdgeInsets.zero,
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  decoration: const BoxDecoration(color: Color(0xFF1565C0)),
+                  child: const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Menu',
+                      style: TextStyle(color: Colors.white, fontSize: 20),
+                    ),
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text('Página Inicial'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LeitorScreen()),
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.pie_chart),
+                title: const Text('Dashboard Inteligente'),
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.list),
+                title: const Text('Estoque Atual'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaEstoque()));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.attach_money),
+                title: const Text('Custos Operacionais'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
+                },
+              ),
             ],
           ),
         ),

@@ -1,11 +1,12 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/produto.dart';
+import '../models/custo_operacional.dart';
 
 class DBHelper {
   static const _dbName = 'estoque_cic.db';
-  // Mudamos a versão para 2 para o app saber que a tabela cresceu
-  static const _dbVersion = 4; 
+  // Mudamos a versão para 5 para o app criar a tabela de custos
+  static const _dbVersion = 5; 
   static const _tableName = 'produtos';
 
   DBHelper._();
@@ -44,6 +45,13 @@ class DBHelper {
         origem TEXT DEFAULT 'Revendido'
       )
     ''');
+    await db.execute('''
+      CREATE TABLE custos_operacionais (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        valor REAL NOT NULL
+      )
+    ''');
   }
 
   // Se o usuário já tinha o app instalado (Versão 1), adiciona as colunas novas sem deletar nada
@@ -64,6 +72,15 @@ class DBHelper {
           quantidade_usada REAL NOT NULL,
           FOREIGN KEY (id_produto_fabricado) REFERENCES produtos (codigo),
           FOREIGN KEY (id_insumo_revendido) REFERENCES produtos (codigo)
+        )
+      ''');
+    }
+    if (oldVersion < 5) {
+      await db.execute('''
+        CREATE TABLE custos_operacionais (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nome TEXT NOT NULL,
+          valor REAL NOT NULL
         )
       ''');
     }
@@ -93,5 +110,24 @@ class DBHelper {
       where: 'codigo = ?',
       whereArgs: [codigo],
     );
+  }
+
+  // --- FUNÇÕES DE CUSTOS OPERACIONAIS --- //
+  Future<List<CustoOperacional>> getCustosOperacionais() async {
+    Database db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query('custos_operacionais');
+    return List.generate(maps.length, (i) {
+      return CustoOperacional.fromJson(maps[i]);
+    });
+  }
+
+  Future<void> replaceCustosOperacionais(List<CustoOperacional> custos) async {
+    Database db = await instance.database;
+    await db.transaction((txn) async {
+      await txn.delete('custos_operacionais'); // Limpa os antigos
+      for (var custo in custos) {
+        await txn.insert('custos_operacionais', custo.toJson()); // Salva os novos
+      }
+    });
   }
 }
