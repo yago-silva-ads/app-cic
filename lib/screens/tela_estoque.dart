@@ -278,6 +278,7 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                 final p = estoqueLocal[i];
                 final lucroUnid = p.valorVenda - p.valorCompra;
                 final isFabricado = p.origem.toLowerCase() == 'fabricado' || p.origem.toLowerCase() == 'produzido';
+                final critico = p.quantidade <= 5;
                 return Dismissible(
                   key: Key('${p.codigo}_$i'),
                   direction: DismissDirection.endToStart,
@@ -293,11 +294,19 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
                   child: Card(
-                  elevation: 4,
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
+                    elevation: critico ? 6 : 3,
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      side: BorderSide(color: critico ? Colors.red.shade400 : Colors.transparent, width: 2),
+                    ),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15),
+                        gradient: critico ? LinearGradient(colors: [Colors.red.shade50, Colors.white]) : null,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -305,11 +314,19 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Expanded(
-                              child: Text(
-                                p.nome,
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
+                              child: Row(
+                                children: [
+                                  if (critico) const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                                  if (critico) const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      p.nome,
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: critico ? Colors.red.shade900 : Colors.black87),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             Container(
@@ -344,10 +361,11 @@ class _TelaEstoqueState extends State<TelaEstoque> {
                       ],
                     ),
                   ),
+                ),
               ),
             );
-              },
-            ),
+          },
+        ),
     );
   }
 }

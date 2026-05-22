@@ -19,7 +19,7 @@ class IaService {
       final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
 
       final buffer = StringBuffer();
-      buffer.writeln("Você é um Consultor Financeiro de Varejo. Analise o estoque abaixo e dê 3 insights estratégicos curtos (em bullet points com emojis) sobre capital parado, oportunidades de lucro e risco. Seja direto.\n");
+      buffer.writeln("Você é um Consultor Executivo de Inteligência de Mercado. Avalie este estoque empresarial e forneça 3 diagnósticos rápidos (em tópicos com emojis) focando na agressividade de preços, competitividade de mercado e mitigação de riscos de falência.\n");
 
       for (var p in estoque.take(15)) {
         buffer.writeln("- ${p.nome}: Qtd ${p.quantidade}, Custo R\$${p.valorCompra}, Venda R\$${p.valorVenda}");
@@ -40,7 +40,7 @@ class IaService {
     try {
       final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
 
-      final prompt = "Analise rapidamente o produto ${produto.nome} (Qtd ${produto.quantidade}, Custo R\$${produto.valorCompra}, Venda R\$${produto.valorVenda}) e gere insights curtos em tópicos sobre margem e risco.";
+      final prompt = "Aja como um Estrategista de Varejo. Avalie o produto: ${produto.nome} (Estoque: ${produto.quantidade}, Preço de Custo: R\$${produto.valorCompra}, Preço de Venda: R\$${produto.valorVenda}). Crie uma estratégia agressiva e curta em tópicos sobre margem de lucro sugerida versus preço competitivo praticado pelo mercado.";
 
       final response = await model.generateContent([Content.text(prompt)]);
       return response.text ?? "Análise concluída, mas sem texto retornado.";

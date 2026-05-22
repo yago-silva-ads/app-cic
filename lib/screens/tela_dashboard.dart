@@ -339,96 +339,90 @@ class _TelaDashboardState extends State<TelaDashboard> {
   }
 
   Widget _buildAbaConsultorIA() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.1), blurRadius: 15, spreadRadius: 5)],
+        border: Border.all(color: Colors.teal.shade100, width: 1.5),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Painel Consultor IA (Teal)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.teal.shade200),
-            ),
+          Padding(
+            padding: const EdgeInsets.all(24),
             child: Row(
               children: [
-                Icon(Icons.auto_awesome, color: Colors.teal.shade700, size: 32),
-                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.teal.shade50, shape: BoxShape.circle),
+                  child: Icon(Icons.psychology, size: 40, color: Colors.teal.shade700),
+                ),
+                const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Consultor IA Global", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.teal.shade900)),
+                      Text("Consultor Executivo IA", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Colors.teal.shade900)),
                       const SizedBox(height: 4),
-                      Text("Clique no botão abaixo para gerar recomendações estratégicas completas baseadas em todo o seu inventário.", style: TextStyle(color: Colors.teal.shade800, fontSize: 13)),
+                      Text("Decisões estratégicas baseadas em inteligência de mercado.", style: TextStyle(color: Colors.teal.shade700, fontSize: 13)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _isAnalyzing ? null : _gerarAnaliseInteligente,
-            icon: _isAnalyzing
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.auto_awesome, color: Colors.white),
-            label: Text(_isAnalyzing ? "Analisando estoque..." : "Gerar Análise Inteligente", style: const TextStyle(fontSize: 16)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.teal.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ElevatedButton.icon(
+              onPressed: _isAnalyzing ? null : _gerarAnaliseInteligente,
+              icon: _isAnalyzing
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.insights, color: Colors.white),
+              label: Text(_isAnalyzing ? "Processando Algoritmos..." : "Gerar Diagnóstico Estratégico", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.teal.shade600,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(55),
+                elevation: 4,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          const Divider(height: 1),
           Expanded(
             child: _analiseIA == null
-                ? const SizedBox.shrink()
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.query_stats, size: 60, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text("Aguardando comando para analisar inventário.", style: TextStyle(color: Colors.grey.shade500, fontSize: 16)),
+                      ],
+                    ),
+                  )
                 : _analiseIA == "ERRO_OFFLINE"
-                    ? Card(
-                        elevation: 0,
-                        color: Colors.transparent,
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.wifi_off_rounded, size: 64, color: Colors.blueGrey.shade300),
-                              const SizedBox(height: 16),
-                              Text(
-                                "Modo Offline: Verifique sua conexão para gerar análises inteligentes",
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade700),
-                              ),
-                            ],
-                          ),
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.wifi_off_rounded, size: 60, color: Colors.red.shade300),
+                            const SizedBox(height: 16),
+                            Text("Conexão com o servidor IA perdida.", style: TextStyle(color: Colors.red.shade400, fontSize: 16, fontWeight: FontWeight.bold)),
+                          ],
                         ),
                       )
                     : SingleChildScrollView(
-                        child: Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.teal.shade100),
-                            boxShadow: [BoxShadow(color: Colors.teal.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: const [
-                                  Icon(Icons.check_circle, color: Colors.teal, size: 20),
-                                  SizedBox(width: 8),
-                                  Text("Relatório Gerado com Sucesso", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.teal)),
-                                ],
-                              ),
-                              const Divider(height: 30),
-                              MarkdownBody(data: _analiseIA!),
-                            ],
+                        padding: const EdgeInsets.all(24),
+                        child: MarkdownBody(
+                          data: _analiseIA!,
+                          styleSheet: MarkdownStyleSheet(
+                            h1: TextStyle(color: Colors.teal.shade900, fontWeight: FontWeight.bold),
+                            h2: TextStyle(color: Colors.teal.shade800, fontWeight: FontWeight.bold),
+                            p: const TextStyle(fontSize: 15, height: 1.6, color: Colors.black87),
+                            listBullet: TextStyle(color: Colors.teal.shade600),
                           ),
                         ),
                       ),
