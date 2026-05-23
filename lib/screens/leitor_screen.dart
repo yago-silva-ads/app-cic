@@ -168,13 +168,13 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   Icon(Icons.warning_amber_rounded, color: Colors.red),
                   SizedBox(width: 8),
                   Text(
-                    "Risco de Prejuízo",
+                    "Preço Insuficiente!",
                     style: TextStyle(color: Colors.red),
                   ),
                 ],
               ),
               content: const Text(
-                "A margem de lucro definida é muito baixa. Isso pode não ser suficiente para cobrir seus custos fixos. Deseja salvar este produto mesmo assim?",
+                "A margem de lucro definida pode não ser suficiente para cobrir seus custos fixos. Deseja salvar este produto mesmo assim?",
               ),
               actions: [
                 TextButton(

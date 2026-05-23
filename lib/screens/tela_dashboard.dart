@@ -229,7 +229,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
           const SizedBox(height: 12),
           _buildResumoCard("Lucro Bruto", lucroBruto, Colors.blueAccent, Icons.trending_up),
           const SizedBox(height: 12),
-          _buildResumoCard("Saldo Operacional", lucroLiquido, Colors.teal, Icons.account_balance_wallet),
+          _buildResumoCard("Saldo Operacional (Fora Impostos e Taxas)", lucroLiquido, Colors.teal, Icons.account_balance_wallet),
           const SizedBox(height: 30),
           const Center(child: Text("Navegue pelas abas acima para gráficos e Inteligência Artificial.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12))),
         ],
