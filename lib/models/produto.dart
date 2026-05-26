@@ -8,6 +8,7 @@ class Produto {
   final double valorVenda;
   final String origem; // ✅ Adicionado
   final Map<String, double>? insumos; // ✅ Adicionado (para produtos fabricados)
+  final int vendidas; // ✅ Adicionado (unidades vendidas)
 
   Produto({
     required this.codigo,
@@ -19,6 +20,7 @@ class Produto {
     required this.valorVenda,
     required this.origem,
     this.insumos,
+    this.vendidas = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +32,7 @@ class Produto {
         'markup': markup,
         'valorVenda': valorVenda,
         'origem': origem,
+        'vendidas': vendidas,
       };
 
   factory Produto.fromJson(Map<String, dynamic> json) => Produto(
@@ -43,6 +46,7 @@ class Produto {
         origem: json['origem'] ?? 'Revendido',
         insumos: (json['insumos'] as Map<String, dynamic>?)
             ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
+        vendidas: json['vendidas'] ?? 0,
       );
 
   double calcularCustoFabricado(List<Produto> todoEstoque) {

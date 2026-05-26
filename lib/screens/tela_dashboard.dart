@@ -27,6 +27,9 @@ class _TelaDashboardState extends State<TelaDashboard> {
   String _filtroQtd = 'Todos';
   int _sortColumnIndex = 0;
   bool _sortAscending = true;
+  
+  // Expandidos dos cards
+  Set<String> _expandidosCards = {};
 
   @override
   void initState() {
@@ -103,6 +106,89 @@ class _TelaDashboardState extends State<TelaDashboard> {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
     });
+  }
+
+  Widget _buildAnaliseVendasCard() {
+    int totalEstoque = 0;
+    int totalVendido = 0;
+    int totalRestante = 0;
+
+    for (var p in estoque) {
+      totalEstoque += p.quantidade;
+      totalVendido += p.vendidas;
+      totalRestante += (p.quantidade - p.vendidas);
+    }
+
+    double percentualVendido = totalEstoque > 0 ? (totalVendido / totalEstoque) * 100 : 0;
+    double percentualRestante = totalEstoque > 0 ? (totalRestante / totalEstoque) * 100 : 0;
+
+    return Card(
+      elevation: 2,
+      color: Colors.white,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(width: 4, height: 16, color: pbiBlue1),
+                const SizedBox(width: 8),
+                const Text("Análise de Vendas", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text("Comparativo entre unidades vendidas e estoque disponível.", style: TextStyle(fontSize: 12, color: Colors.black54)),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                Column(
+                  children: [
+                    Text("Total em Estoque", style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    const SizedBox(height: 4),
+                    Text("$totalEstoque", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Text("Vendidas", style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    const SizedBox(height: 4),
+                    Text("$totalVendido", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: pbiBlue1)),
+                  ],
+                ),
+                Column(
+                  children: [
+                    Text("Restante", style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    const SizedBox(height: 4),
+                    Text("$totalRestante", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.orange)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            ClipRect(
+              child: LinearProgressIndicator(
+                minHeight: 12,
+                value: percentualVendido / 100,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: const AlwaysStoppedAnimation(pbiBlue1),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("${percentualVendido.toStringAsFixed(1)}% Vendido", style: const TextStyle(fontSize: 13, color: Colors.blueGrey, fontWeight: FontWeight.w600)),
+                Text("${percentualRestante.toStringAsFixed(1)}% Restante", style: const TextStyle(fontSize: 13, color: Colors.orange, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildFilterDropdown(String label, String value, List<String> options, ValueChanged<String?> onChanged) {
@@ -183,19 +269,69 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
-  Widget _buildResumoCard(String titulo, double valor, Color corIcone, IconData icone) {
+  Widget _buildResumoCard(String titulo, double valor, Color corIcone, IconData icone, String descricao) {
+    bool expandido = _expandidosCards.contains(titulo);
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        leading: CircleAvatar(
-          backgroundColor: corIcone.withOpacity(0.1),
-          radius: 25,
-          child: Icon(icone, color: corIcone, size: 28),
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            if (expandido) {
+              _expandidosCards.remove(titulo);
+            } else {
+              _expandidosCards.add(titulo);
+            }
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: corIcone.withOpacity(0.1),
+                          radius: 25,
+                          child: Icon(icone, color: corIcone, size: 28),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(titulo, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w600)),
+                              const SizedBox(height: 4),
+                              Text("R\$ ${valor.toStringAsFixed(2)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    expandido ? Icons.expand_less : Icons.expand_more,
+                    color: corIcone,
+                  ),
+                ],
+              ),
+              if (expandido) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 12),
+                Text(
+                  descricao,
+                  style: TextStyle(fontSize: 14, color: Colors.blueGrey.shade700, height: 1.5),
+                ),
+              ],
+            ],
+          ),
         ),
-        title: Text(titulo, style: const TextStyle(fontSize: 14, color: Colors.grey, fontWeight: FontWeight.w600)),
-        subtitle: Text("R\$ ${valor.toStringAsFixed(2)}", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900)),
       ),
     );
   }
@@ -221,15 +357,15 @@ class _TelaDashboardState extends State<TelaDashboard> {
           const SizedBox(height: 8),
           const Text("Acompanhe o capital total investido e o retorno projetado de todo o seu inventário.", style: TextStyle(fontSize: 14, color: Colors.grey)),
           const SizedBox(height: 24),
-          _buildResumoCard("Custo do Estoque", custoTotal, Colors.redAccent, Icons.shopping_bag_outlined),
+          _buildResumoCard("Custo do Estoque", custoTotal, Colors.redAccent, Icons.shopping_bag_outlined, "O valor utilizado para comprar/fabricar os produtos que serão revendidos."),
           const SizedBox(height: 12),
-          _buildResumoCard("Custos Operacionais", custosFixos, Colors.orange, Icons.money_off),
+          _buildResumoCard("Custos Operacionais", custosFixos, Colors.orange, Icons.money_off, "O valor gasto no dia a dia para manter a loja funcionando, como frete, embalagens, água ou luz."),
           const SizedBox(height: 12),
-          _buildResumoCard("Faturamento Projetado", vendaTotal, Colors.green, Icons.point_of_sale),
+          _buildResumoCard("Faturamento Projetado", vendaTotal, Colors.green, Icons.point_of_sale, "O valor total que vai entrar no seu caixa se todos os produtos forem vendidos pelo preço atual."),
           const SizedBox(height: 12),
-          _buildResumoCard("Lucro Bruto", lucroBruto, Colors.blueAccent, Icons.trending_up),
+          _buildResumoCard("Lucro Bruto", lucroBruto, Colors.blueAccent, Icons.trending_up, "O valor que sobra das suas vendas depois de pagar apenas o custo de compra das mercadorias vendidas."),
           const SizedBox(height: 12),
-          _buildResumoCard("Saldo Operacional (Fora Impostos e Taxas)", lucroLiquido, Colors.teal, Icons.account_balance_wallet),
+          _buildResumoCard("Saldo Operacional (Fora Impostos e Taxas)", lucroLiquido, Colors.teal, Icons.account_balance_wallet, "O resultado final do seu negócio após pagar tudo (estoque e despesas). Se estiver negativo, significa que a loja está operando no prejuízo."),
           const SizedBox(height: 30),
           const Center(child: Text("Navegue pelas abas acima para gráficos e Inteligência Artificial.", style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic, fontSize: 12))),
         ],
@@ -273,6 +409,8 @@ class _TelaDashboardState extends State<TelaDashboard> {
           buildPieChartCard(estoque),
           const SizedBox(height: 20),
           buildStackedBarChartCard(estoque),
+          const SizedBox(height: 20),
+          _buildAnaliseVendasCard(),
           const SizedBox(height: 20),
           buildLineChartCard(estoque),
           const SizedBox(height: 30),

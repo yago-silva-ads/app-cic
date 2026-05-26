@@ -26,10 +26,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _carregarEstoque();
-    // Inicializar vendadas com zeros
-    for (var p in estoqueLocal) {
-      vendadasPorProduto[p.codigo] = 0;
-    }
   }
 
   @override
@@ -42,11 +38,19 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     if (widget.estoque != null) {
       setState(() {
         estoqueLocal = widget.estoque!;
+        // Carregar vendidas do banco
+        for (var p in estoqueLocal) {
+          vendadasPorProduto[p.codigo] = p.vendidas;
+        }
       });
     } else {
       final produtos = await DBHelper.instance.getEstoque();
       setState(() {
         estoqueLocal = produtos;
+        // Carregar vendidas do banco
+        for (var p in estoqueLocal) {
+          vendadasPorProduto[p.codigo] = p.vendidas;
+        }
       });
     }
   }
@@ -275,12 +279,21 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                       int vendidas = vendadasPorProduto[p.codigo] ?? 0;
                       int restante = p.quantidade - vendidas;
                       double totalVendidoProduto = vendidas * p.valorVenda;
+                      final critico = restante <= 5;
 
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 2,
-                        child: Padding(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: critico ? Colors.red.shade200 : Colors.transparent, width: 2),
+                        ),
+                        elevation: critico ? 4 : 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12),
+                            color: critico ? Colors.red.shade50 : Colors.white,
+                          ),
+                          child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -356,7 +369,21 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                     children: [
                                       IconButton(
                                         onPressed: vendidas > 0
-                                            ? () => setState(() => vendadasPorProduto[p.codigo] = vendidas - 1)
+                                            ? () async {
+                                                setState(() => vendadasPorProduto[p.codigo] = vendidas - 1);
+                                                final produtoAtualizado = Produto(
+                                                  codigo: p.codigo,
+                                                  nome: p.nome,
+                                                  lote: p.lote,
+                                                  quantidade: p.quantidade,
+                                                  valorCompra: p.valorCompra,
+                                                  markup: p.markup,
+                                                  valorVenda: p.valorVenda,
+                                                  origem: p.origem,
+                                                  vendidas: vendidas - 1,
+                                                );
+                                                await DBHelper.instance.insertProduto(produtoAtualizado);
+                                              }
                                             : null,
                                         icon: const Icon(Icons.remove),
                                         color: Colors.red,
@@ -382,10 +409,22 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                                   child: const Text("Cancelar"),
                                                 ),
                                                 ElevatedButton(
-                                                  onPressed: () {
+                                                  onPressed: () async {
                                                     int? value = int.tryParse(ctrl.text);
                                                     if (value != null && value >= 0 && value <= p.quantidade) {
                                                       setState(() => vendadasPorProduto[p.codigo] = value);
+                                                      final produtoAtualizado = Produto(
+                                                        codigo: p.codigo,
+                                                        nome: p.nome,
+                                                        lote: p.lote,
+                                                        quantidade: p.quantidade,
+                                                        valorCompra: p.valorCompra,
+                                                        markup: p.markup,
+                                                        valorVenda: p.valorVenda,
+                                                        origem: p.origem,
+                                                        vendidas: value,
+                                                      );
+                                                      await DBHelper.instance.insertProduto(produtoAtualizado);
                                                       Navigator.pop(ctx);
                                                     } else {
                                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -413,7 +452,21 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                       ),
                                       IconButton(
                                         onPressed: vendidas < p.quantidade
-                                            ? () => setState(() => vendadasPorProduto[p.codigo] = vendidas + 1)
+                                            ? () async {
+                                                setState(() => vendadasPorProduto[p.codigo] = vendidas + 1);
+                                                final produtoAtualizado = Produto(
+                                                  codigo: p.codigo,
+                                                  nome: p.nome,
+                                                  lote: p.lote,
+                                                  quantidade: p.quantidade,
+                                                  valorCompra: p.valorCompra,
+                                                  markup: p.markup,
+                                                  valorVenda: p.valorVenda,
+                                                  origem: p.origem,
+                                                  vendidas: vendidas + 1,
+                                                );
+                                                await DBHelper.instance.insertProduto(produtoAtualizado);
+                                              }
                                             : null,
                                         icon: const Icon(Icons.add),
                                         color: Colors.green,
@@ -427,6 +480,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                               ),
                             ],
                           ),
+                        ),
                         ),
                       );
                     },
@@ -611,7 +665,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Dashboard"),
+        title: const Text("Estoque Atual"),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
         bottom: TabBar(

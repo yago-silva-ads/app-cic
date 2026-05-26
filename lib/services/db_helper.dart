@@ -5,8 +5,8 @@ import '../models/custo_operacional.dart';
 
 class DBHelper {
   static const _dbName = 'estoque_cic.db';
-  // Mudamos a versão para 5 para o app criar a tabela de custos
-  static const _dbVersion = 5; 
+  // Mudamos a versão para 6 para adicionar coluna de vendidas
+  static const _dbVersion = 6; 
   static const _tableName = 'produtos';
 
   DBHelper._();
@@ -84,6 +84,15 @@ class DBHelper {
         )
       ''');
     }
+    if (oldVersion < 6) {
+      // Evita crash quando o banco já contém a coluna (ex.: upgrade executou parcialmente antes).
+      final cols = await db.rawQuery("PRAGMA table_info($_tableName)");
+      final hasVendidas = cols.any((c) => (c['name'] as String?) == 'vendidas');
+      if (!hasVendidas) {
+        await db.execute("ALTER TABLE $_tableName ADD COLUMN vendidas INTEGER NOT NULL DEFAULT 0");
+      }
+    }
+
   }
 
   Future<int> insertProduto(Produto produto) async {

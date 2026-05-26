@@ -448,7 +448,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Precificação (Cintra)",
+                          "Precificação",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: _alertaMargem ? Colors.red : Colors.blue,
