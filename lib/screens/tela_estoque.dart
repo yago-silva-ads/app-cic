@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
-import '../services/db_helper.dart';
+import '../services/supabase_helper.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
@@ -26,6 +28,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _carregarEstoque();
+    _carregarClientesHoje();
   }
 
   @override
@@ -44,7 +47,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
         }
       });
     } else {
-      final produtos = await DBHelper.instance.getEstoque();
+      final produtos = await SupabaseHelper.getEstoque();
       setState(() {
         estoqueLocal = produtos;
         // Carregar vendidas do banco
@@ -53,6 +56,21 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
         }
       });
     }
+  }
+
+  Future<void> _carregarClientesHoje() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      clientesHoje = prefs.getInt('clientes_hoje_salvo') ?? 0;
+    });
+  }
+
+  Future<void> _atualizarClientes(int novoValor) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('clientes_hoje_salvo', novoValor);
+    setState(() {
+      clientesHoje = novoValor;
+    });
   }
 
   void _onUpdate() {
@@ -78,7 +96,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                 key: Key('${p.codigo}_$i'),
                 direction: DismissDirection.endToStart,
                 onDismissed: (_) async {
-                  await DBHelper.instance.deleteProduto(p.codigo);
+                  await SupabaseHelper.deleteProduto(p.codigo);
                   _onUpdate();
                 },
                 background: Container(
@@ -205,7 +223,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                             children: [
                               IconButton(
                                 onPressed: clientesHoje > 0
-                                    ? () => setState(() => clientesHoje--)
+                                    ? () => _atualizarClientes(clientesHoje - 1)
                                     : null,
                                 icon: const Icon(Icons.remove_circle_outline),
                                 color: Colors.red,
@@ -232,7 +250,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                           onPressed: () {
                                             int? value = int.tryParse(ctrl.text);
                                             if (value != null && value >= 0) {
-                                              setState(() => clientesHoje = value);
+                                              _atualizarClientes(value);
                                               Navigator.pop(ctx);
                                             }
                                           },
@@ -255,7 +273,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                 ),
                               ),
                               IconButton(
-                                onPressed: () => setState(() => clientesHoje++),
+                                onPressed: () => _atualizarClientes(clientesHoje + 1),
                                 icon: const Icon(Icons.add_circle_outline),
                                 color: Colors.green,
                                 iconSize: 28,
@@ -382,7 +400,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                                   origem: p.origem,
                                                   vendidas: vendidas - 1,
                                                 );
-                                                await DBHelper.instance.insertProduto(produtoAtualizado);
+                                                await SupabaseHelper.insertProduto(produtoAtualizado);
                                               }
                                             : null,
                                         icon: const Icon(Icons.remove),
@@ -424,7 +442,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                                         origem: p.origem,
                                                         vendidas: value,
                                                       );
-                                                      await DBHelper.instance.insertProduto(produtoAtualizado);
+                                                      await SupabaseHelper.insertProduto(produtoAtualizado);
                                                       Navigator.pop(ctx);
                                                     } else {
                                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -465,7 +483,15 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                                                   origem: p.origem,
                                                   vendidas: vendidas + 1,
                                                 );
-                                                await DBHelper.instance.insertProduto(produtoAtualizado);
+                                                await SupabaseHelper.insertProduto(produtoAtualizado);
+                                                
+                                                // 1. Registra a venda pro Gráfico 
+                                                await SupabaseHelper.registrarVenda(p.codigo, 1, p.valorVenda);
+                                                // 2. Dispara evento de métrica pro Firebase Analytics
+                                                await FirebaseAnalytics.instance.logEvent(
+                                                  name: 'venda_realizada',
+                                                  parameters: {'codigo': p.codigo, 'qtd': 1, 'valor': p.valorVenda},
+                                                );
                                               }
                                             : null,
                                         icon: const Icon(Icons.add),
@@ -647,7 +673,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     origem: tipoSelecionado,
                   );
 
-                  await DBHelper.instance.insertProduto(produtoAtualizado);
+                  await SupabaseHelper.insertProduto(produtoAtualizado);
 
                   _onUpdate();
                   if (mounted) Navigator.pop(ctx);

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/custo_operacional.dart';
-import '../services/db_helper.dart';
+import '../services/supabase_helper.dart';
 import '../utils/moeda_formatter.dart';
 import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
@@ -37,7 +37,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
 
   Future<void> _carregarCustos() async {
     try {
-      final custos = await DBHelper.instance.getCustosOperacionais();
+      final custos = await SupabaseHelper.getCustosOperacionais();
       setState(() {
         if (custos.isEmpty) {
           custoEntries = [
@@ -121,7 +121,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
         );
       }
 
-      await DBHelper.instance.replaceCustosOperacionais(listaSalva);
+      await SupabaseHelper.replaceCustosOperacionais(listaSalva);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(

@@ -4,7 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
-import '../services/db_helper.dart';
+import '../services/supabase_helper.dart';
 import '../services/api_service.dart';
 import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
@@ -83,7 +83,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   }
 
   Future<void> _carregarDados() async {
-    final produtos = await DBHelper.instance.getEstoque();
+    final produtos = await SupabaseHelper.getEstoque();
     setState(() {
       bancoDeEstoque = produtos;
     });
@@ -209,7 +209,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
           tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
     );
 
-    await DBHelper.instance.insertProduto(novoProduto);
+    await SupabaseHelper.insertProduto(novoProduto);
 
     _carregarDados();
     _limpar();
