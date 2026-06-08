@@ -213,7 +213,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                             ];
                           })(),
                           const SizedBox(height: 4),
-                          Text("Desc. Seguro Máx: ${((lucroUnid / p.valorVenda) * 100).toStringAsFixed(1)}% (Negociação)", style: const TextStyle(fontSize: 12, color: Colors.indigo)),
+                          Text("Margem Bruta: ${((lucroUnid / p.valorVenda) * 100).toStringAsFixed(1)}%", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.indigo)),
                           const Divider(),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,

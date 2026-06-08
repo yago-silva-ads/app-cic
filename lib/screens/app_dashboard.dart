@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import '../models/produto.dart';
+import '../models/custo_operacional.dart';
 import '../services/supabase_helper.dart';
 import '../services/ia_service.dart';
 
@@ -14,6 +15,7 @@ class AppDashboard extends StatefulWidget {
 class _AppDashboardState extends State<AppDashboard> {
   List<Produto> estoque = [];
   List<Map<String, dynamic>> historicoVendas = [];
+  List<CustoOperacional> custosOperacionais = [];
   bool _isAnalyzing = false;
   String? _analiseIA;
 
@@ -26,10 +28,12 @@ class _AppDashboardState extends State<AppDashboard> {
   Future<void> _carregarDados() async {
     final dados = await SupabaseHelper.getEstoque();
     final historico = await SupabaseHelper.getHistoricoVendas();
+    final custos = await SupabaseHelper.getCustosOperacionais();
 
     setState(() {
       estoque = dados;
       historicoVendas = historico;
+      custosOperacionais = custos;
     });
   }
 
@@ -39,7 +43,7 @@ class _AppDashboardState extends State<AppDashboard> {
       _analiseIA = null;
     });
 
-    String resposta = await IaService.analisarEstoque(estoque, historicoVendas, []);
+    String resposta = await IaService.analisarEstoque(estoque, historicoVendas, custosOperacionais);
 
     setState(() {
       _analiseIA = resposta;

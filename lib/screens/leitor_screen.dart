@@ -224,6 +224,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       origem:
           tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
       dataValidade: _dataValidadeSelecionada,
+      dataEntrada: DateTime.now(), // <-- Registro automático do momento da entrada
     );
 
     await SupabaseHelper.insertProduto(novoProduto);
@@ -450,28 +451,49 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   ),
                   const SizedBox(height: 10),
 
-                  InkWell(
-                    onTap: () => _selecionarDataValidade(context),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Data de Validade',
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _dataValidadeSelecionada == null
-                                ? 'Selecionar validade'
-                                : 'Validade: ${_dataValidadeSelecionada!.day.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.month.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.year}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: _dataValidadeSelecionada == null ? Theme.of(context).hintColor : null,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selecionarDataValidade(context),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Data de Validade',
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _dataValidadeSelecionada == null
+                                        ? 'Selecionar'
+                                        : '${_dataValidadeSelecionada!.day.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.month.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.year}',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: _dataValidadeSelecionada == null ? Theme.of(context).hintColor : null,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.calendar_month, size: 20),
+                              ],
                             ),
                           ),
-                          const Icon(Icons.calendar_month),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Data de Entrada',
+                          ),
+                          child: Text(
+                            'Hoje (Automático)',
+                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 10),
 
