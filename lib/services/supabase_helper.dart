@@ -24,7 +24,14 @@ class SupabaseHelper {
               valorCompra: (json['valor_compra'] as num).toDouble(),
               markup: (json['markup'] as num).toDouble(),
               valorVenda: (json['valor_venda'] as num).toDouble(),
+              // AS TRÊS LINHAS NOVAS AQUI:
               origem: json['origem'] ?? 'Revendido',
+              dataEntrada: json['data_entrada'] != null
+                  ? DateTime.tryParse(json['data_entrada'])
+                  : null,
+              dataValidade: json['data_validade'] != null
+                  ? DateTime.tryParse(json['data_validade'])
+                  : null,
               vendidas: json['vendidas'] ?? 0,
             ),
           )
@@ -45,9 +52,12 @@ class SupabaseHelper {
       'valor_compra': p.valorCompra,
       'markup': p.markup,
       'valor_venda': p.valorVenda,
+      // AS TRÊS LINHAS NOVAS AQUI:
       'origem': p.origem,
+      'data_entrada': p.dataEntrada?.toIso8601String(),
+      'data_validade': p.dataValidade?.toIso8601String(),
       'vendidas': p.vendidas,
-    }, onConflict: 'codigo'); // <-- O SEGREDO ESTÁ AQUI
+    }, onConflict: 'codigo');
   }
 
   // Registrar uma venda no histórico (usado pelo Firebase Analytics e Fluxo de Caixa)
@@ -77,12 +87,6 @@ class SupabaseHelper {
       return [];
     }
   }
-  
-  
-  
-  
-  
-  
 
   static Future<void> deleteProduto(String codigo) async {
     await supabase.from('produtos').delete().eq('codigo', codigo);

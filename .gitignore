@@ -46,3 +46,6 @@ app.*.map.json
 
 # Variáveis de ambiente (Segurança da API)
 .env
+
+# Segredos e Chaves de API
+lib/secrets.dart

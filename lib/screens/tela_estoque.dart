@@ -158,6 +158,62 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                           const SizedBox(height: 8),
                           Text("Qtd: ${p.quantidade}", style: p.quantidade <= 5 ? const TextStyle(color: Colors.red, fontWeight: FontWeight.bold) : null),
                           Text("Custo: R\$ ${p.valorCompra.toStringAsFixed(2).replaceAll('.', ',')}"),
+                          const SizedBox(height: 4),
+                          // Lógica Inteligente de Exibição das Datas
+                          ...(() {
+                            String textEntrada = p.dataEntrada != null 
+                              ? "Entrada: ${p.dataEntrada!.day.toString().padLeft(2, '0')}/${p.dataEntrada!.month.toString().padLeft(2, '0')}/${p.dataEntrada!.year}"
+                              : "Entrada não registada";
+
+                            Widget validadeWidget;
+                            if (p.dataValidade == null) {
+                              validadeWidget = Text(
+                                "Validade não registada",
+                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                              );
+                            } else {
+                              final hoje = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+                              final validade = DateTime(p.dataValidade!.year, p.dataValidade!.month, p.dataValidade!.day);
+                              final diferenca = validade.difference(hoje).inDays;
+                              
+                              String dataFormatada = "${p.dataValidade!.day.toString().padLeft(2, '0')}/${p.dataValidade!.month.toString().padLeft(2, '0')}/${p.dataValidade!.year}";
+
+                              if (diferenca <= 0) {
+                                validadeWidget = Row(
+                                  children: [
+                                    const Text("❌ ", style: TextStyle(fontSize: 12)),
+                                    Text(
+                                      "PRODUTO VENCIDO ($dataFormatada)",
+                                      style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ],
+                                );
+                              } else if (diferenca >= 1 && diferenca <= 14) {
+                                validadeWidget = Row(
+                                  children: [
+                                    const Text("⚠️ ", style: TextStyle(fontSize: 12)),
+                                    Text(
+                                      "Vence em $diferenca dias ($dataFormatada)",
+                                      style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                  ],
+                                );
+                              } else {
+                                validadeWidget = Text(
+                                  "Validade: $dataFormatada",
+                                  style: const TextStyle(color: Colors.green, fontSize: 12),
+                                );
+                              }
+                            }
+
+                            return [
+                              Text(textEntrada, style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
+                              const SizedBox(height: 2),
+                              validadeWidget,
+                            ];
+                          })(),
+                          const SizedBox(height: 4),
+                          Text("Desc. Seguro Máx: ${((lucroUnid / p.valorVenda) * 100).toStringAsFixed(1)}% (Negociação)", style: const TextStyle(fontSize: 12, color: Colors.indigo)),
                           const Divider(),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -521,6 +577,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
   void _edit(int index) {
     Produto p = estoqueLocal[index];
     TextEditingController n = TextEditingController(text: p.nome);
+    DateTime? validadeModal = p.dataValidade;
     TextEditingController q = TextEditingController(
       text: p.quantidade.toString(),
     );
@@ -592,6 +649,24 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     ),
                     onChanged: (_) =>
                         recalcularVenda(), 
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    icon: const Icon(Icons.calendar_month, color: Colors.blueGrey),
+                    label: Text(validadeModal != null 
+                      ? "Vence em: ${validadeModal!.day.toString().padLeft(2, '0')}/${validadeModal!.month.toString().padLeft(2, '0')}/${validadeModal!.year}" 
+                      : "Definir Data de Validade"),
+                    onPressed: () async {
+                      final data = await showDatePicker(
+                        context: context,
+                        initialDate: validadeModal ?? DateTime.now().add(const Duration(days: 30)),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (data != null) {
+                        setStateModal(() => validadeModal = data);
+                      }
+                    },
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -670,6 +745,8 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     valorCompra: parsedCusto,
                     markup: parsedMarkup,
                     valorVenda: parsedVenda,
+                    dataValidade: validadeModal,
+                    dataEntrada: p.dataEntrada ?? DateTime.now(), // Registra a entrada original!
                     origem: tipoSelecionado,
                   );
 

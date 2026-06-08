@@ -39,7 +39,7 @@ class _AppDashboardState extends State<AppDashboard> {
       _analiseIA = null;
     });
 
-    String resposta = await IaService.analisarEstoque(estoque, historicoVendas);
+    String resposta = await IaService.analisarEstoque(estoque, historicoVendas, []);
 
     setState(() {
       _analiseIA = resposta;

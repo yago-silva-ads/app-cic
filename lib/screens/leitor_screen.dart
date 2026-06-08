@@ -39,6 +39,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
 
   List<Produto> bancoDeEstoque = [];
 
+  DateTime? _dataValidadeSelecionada;
+
   @override
   void initState() {
     super.initState();
@@ -125,6 +127,20 @@ class _LeitorScreenState extends State<LeitorScreen> {
     });
   }
 
+  Future<void> _selecionarDataValidade(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _dataValidadeSelecionada ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null && picked != _dataValidadeSelecionada) {
+      setState(() {
+        _dataValidadeSelecionada = picked;
+      });
+    }
+  }
+
   void salvar() async {
     if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...') {
       return;
@@ -207,6 +223,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorVenda: valorVenda,
       origem:
           tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
+      dataValidade: _dataValidadeSelecionada,
     );
 
     await SupabaseHelper.insertProduto(novoProduto);
@@ -235,6 +252,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorVendaController.clear();
       tipoProdutoSelecionado = 'Revendido';
       _alertaMargem = false;
+      _dataValidadeSelecionada = null;
     });
 
     scannerController.start();
@@ -429,6 +447,31 @@ class _LeitorScreenState extends State<LeitorScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  InkWell(
+                    onTap: () => _selecionarDataValidade(context),
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'Data de Validade',
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _dataValidadeSelecionada == null
+                                ? 'Selecionar validade'
+                                : 'Validade: ${_dataValidadeSelecionada!.day.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.month.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.year}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: _dataValidadeSelecionada == null ? Theme.of(context).hintColor : null,
+                            ),
+                          ),
+                          const Icon(Icons.calendar_month),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 10),
 

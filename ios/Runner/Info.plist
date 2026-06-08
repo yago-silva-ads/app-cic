@@ -66,5 +66,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>O App Cic precisa de acesso à câmera para ler os códigos de barra dos produtos e atualizar o seu estoque.</string>
 </dict>
 </plist>

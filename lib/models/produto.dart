@@ -7,7 +7,9 @@ class Produto {
   final double markup;
   final double valorVenda;
   final String origem; // ✅ Adicionado
-  final Map<String, double>? insumos; // ✅ Adicionado (para produtos fabricados)
+  final DateTime? dataEntrada; // ✅ Adicionado (Rastreio de entrada)
+  final DateTime? dataValidade; // ✅ Adicionado (Validade FIFO)
+  final Map<String, dynamic>? insumos; // ✅ Adicionado (para produtos fabricados)
   final int vendidas; // ✅ Adicionado (unidades vendidas)
 
   Produto({
@@ -19,6 +21,8 @@ class Produto {
     required this.markup,
     required this.valorVenda,
     required this.origem,
+    this.dataEntrada,
+    this.dataValidade,
     this.insumos,
     this.vendidas = 0,
   });
@@ -32,6 +36,8 @@ class Produto {
         'markup': markup,
         'valorVenda': valorVenda,
         'origem': origem,
+        'data_entrada': dataEntrada?.toIso8601String(),
+        'data_validade': dataValidade?.toIso8601String(),
         'vendidas': vendidas,
       };
 
@@ -44,6 +50,8 @@ class Produto {
         markup: json['markup'] ?? 2.0,
         valorVenda: json['valorVenda'] ?? 0.0,
         origem: json['origem'] ?? 'Revendido',
+        dataEntrada: json['data_entrada'] != null ? DateTime.tryParse(json['data_entrada']) : null,
+        dataValidade: json['data_validade'] != null ? DateTime.tryParse(json['data_validade']) : null,
         insumos: (json['insumos'] as Map<String, dynamic>?)
             ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
         vendidas: json['vendidas'] ?? 0,
