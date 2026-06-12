@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/supabase_helper.dart';
 
 /// Serviço para gerar relatórios avançados de vendas e estoque
 /// 
@@ -38,10 +39,22 @@ class RelatorioService {
       // Ticket médio
       final ticketMedio = totalVendas > 0 ? faturamento / totalVendas : 0.0;
 
+      // Custos Operacionais totais
+      double totalCustos = 0.0;
+      try {
+        final custos = await SupabaseHelper.getCustosOperacionais();
+        for (var custo in custos) {
+          totalCustos += custo.valor;
+        }
+      } catch (err) {
+        print("Erro ao carregar custos operacionais: $err");
+      }
+
       return {
         'total_faturado': faturamento,
         'total_vendas': totalVendas,
         'ticket_medio': ticketMedio,
+        'custos_operacionais': totalCustos,
         'data_atualizacao': DateTime.now().toString(),
       };
     } catch (e) {

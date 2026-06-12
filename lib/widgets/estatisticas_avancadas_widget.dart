@@ -32,18 +32,10 @@ class _EstatisticasAvancadasWidgetState
       final [
         stats,
         topProdutos,
-        margem,
-        roi,
-        previsao,
-        faturamento7dias,
         produtosEmFalta,
       ] = await Future.wait([
         RelatorioService.getEstatisticasGerais(),
         RelatorioService.getProdutosMaisVendidos(limit: 5),
-        RelatorioService.getMargemLucroMedia(),
-        RelatorioService.getROI(),
-        RelatorioService.getPrevisaoVendas(dias: 7),
-        RelatorioService.getFaturamentoPorPeriodo(7),
         RelatorioService.getProdutosEmFalta(minimo: 5),
       ]);
 
@@ -51,10 +43,6 @@ class _EstatisticasAvancadasWidgetState
         _dados = {
           'stats': stats,
           'topProdutos': topProdutos,
-          'margem': margem,
-          'roi': roi,
-          'previsao': previsao,
-          'faturamento7dias': faturamento7dias,
           'produtosEmFalta': produtosEmFalta,
         };
         _carregando = false;
@@ -82,10 +70,6 @@ class _EstatisticasAvancadasWidgetState
           _buildResumoExecutivo(),
           const SizedBox(height: 24),
 
-          // ===== KPIs PRINCIPAIS =====
-          _buildKPIsPrincipais(),
-          const SizedBox(height: 24),
-
           // ===== TOP 5 PRODUTOS =====
           _buildTopProdutos(),
           const SizedBox(height: 24),
@@ -100,7 +84,6 @@ class _EstatisticasAvancadasWidgetState
 
   Widget _buildResumoExecutivo() {
     final stats = _dados['stats'] as Map<String, dynamic>;
-    final roi = _dados['roi'] as Map<String, dynamic>;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -138,9 +121,9 @@ class _EstatisticasAvancadasWidgetState
           ),
           const SizedBox(height: 8),
           _buildMetricaRow(
-            'ROI Acumulado',
-            '${roi['roi_percentual'] ?? '0'}%',
-            Colors.yellowAccent,
+            'Custos Operacionais',
+            'R\$ ${stats['custos_operacionais']?.toStringAsFixed(2) ?? '0.00'}',
+            Colors.red.shade300,
           ),
           const SizedBox(height: 8),
           _buildMetricaRow(
@@ -179,101 +162,6 @@ class _EstatisticasAvancadasWidgetState
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildKPIsPrincipais() {
-    final margem = _dados['margem'] as Map<String, dynamic>;
-    final roi = _dados['roi'] as Map<String, dynamic>;
-    final previsao = _dados['previsao'] as Map<String, dynamic>;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Indicadores-Chave (KPIs)',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 12,
-          crossAxisSpacing: 12,
-          children: [
-            _buildKPICard(
-              'Margem de Lucro',
-              '${margem['margem_percentual'] ?? '0'}%',
-              Colors.green,
-              'Percentual do faturamento',
-            ),
-            _buildKPICard(
-              'ROI',
-              '${roi['roi_percentual'] ?? '0'}%',
-              Colors.blue,
-              'Retorno sobre investimento',
-            ),
-            _buildKPICard(
-              'Lucro Total',
-              'R\$ ${roi['lucro'] ?? '0'}',
-              Colors.teal,
-              'Ganho acumulado',
-            ),
-            _buildKPICard(
-              'Previsão (7d)',
-              'R\$ ${previsao['previsao'] ?? '0'}',
-              Colors.purple,
-              'Próximos 7 dias',
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKPICard(
-    String titulo,
-    String valor,
-    Color cor,
-    String descricao,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cor.withOpacity(0.1),
-        border: Border.all(color: cor.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            titulo,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: cor,
-            ),
-          ),
-          Text(
-            valor,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: cor,
-            ),
-          ),
-          Text(
-            descricao,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
