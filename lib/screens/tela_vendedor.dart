@@ -237,7 +237,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'Insira os custos fixos operacionais aplicáveis:',
+                    'Insira os custos operacionais aplicáveis:',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 20),

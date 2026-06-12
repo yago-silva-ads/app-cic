@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:csv/csv.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'dart:io';
 import '../models/produto.dart';
 import '../services/supabase_helper.dart';
 import '../services/ia_service.dart';
 import '../models/custo_operacional.dart';
+import '../widgets/estatisticas_avancadas_widget.dart';
 import 'leitor_screen.dart';
 import 'tela_estoque.dart';
 import 'tela_vendedor.dart';
@@ -79,6 +84,92 @@ class _TelaDashboardState extends State<TelaDashboard> {
       _analiseIA = resposta;
       _isAnalyzing = false;
     });
+  }
+
+  Future<void> _exportarECompartilharCsv() async {
+    try {
+      // Mostrar loading
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gerando arquivo CSV...'), duration: Duration(seconds: 2)),
+      );
+
+      // Preparar uma tabela única unindo Vendas e Produtos para o Data Studio
+      List<List<dynamic>> csvData = [
+        [
+          'produto_codigo',
+          'nome_produto',
+          'quantidade_vendida',
+          'custo_unitario',
+          'valor_unitario',
+          'faturamento_bruto',
+          'lucro_real',
+          'data_venda'
+        ]
+      ];
+
+      for (var venda in historicoVendas) {
+        String codigo = venda['produto_codigo']?.toString() ?? '';
+        double valorUnitario = double.tryParse(venda['valor_unitario'].toString()) ?? 0.0;
+        int quantidade = int.tryParse(venda['quantidade_vendida'].toString()) ?? 0;
+        String dataVenda = venda['data_criacao']?.toString() ?? '';
+
+        String nomeProduto = 'Desconhecido';
+        double custoUnitario = 0.0;
+
+        // Busca o produto correspondente para cruzar dados de custo e nome
+        try {
+          var produto = estoque.firstWhere((p) => p.codigo == codigo);
+          nomeProduto = produto.nome;
+          custoUnitario = produto.valorCompra;
+        } catch (_) {}
+
+        double faturamentoBruto = quantidade * valorUnitario;
+        double lucroReal = faturamentoBruto - (quantidade * custoUnitario);
+
+        csvData.add([
+          codigo,
+          nomeProduto,
+          quantidade,
+          // Mantendo os números com ponto (padrão de banco de dados) para evitar confusão de colunas
+          custoUnitario.toStringAsFixed(2),
+          valorUnitario.toStringAsFixed(2),
+          faturamentoBruto.toStringAsFixed(2),
+          lucroReal.toStringAsFixed(2),
+          dataVenda,
+        ]);
+      }
+
+      // Converter para CSV padrão (separado por vírgula) e manter UTF-8
+      String csv = const ListToCsvConverter().convert(csvData);
+      String csvComBom = '\uFEFF$csv';
+
+      // Obter diretório temporário
+      final directory = await getTemporaryDirectory();
+      final dataAgora = DateTime.now().toString().replaceAll(':', '-').split('.').first;
+      final file = File('${directory.path}/dashboard_export_$dataAgora.csv');
+
+      // Salvar arquivo
+      await file.writeAsString(csvComBom);
+
+      // Compartilhar arquivo
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Exportação de dados do Dashboard',
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('CSV exportado com sucesso!'), duration: Duration(seconds: 2)),
+        );
+      }
+    } catch (e) {
+      print('Erro ao exportar CSV: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar: $e'), duration: const Duration(seconds: 3)),
+        );
+      }
+    }
   }
 
   Widget _buildAlertaPrejuizo() {
@@ -399,12 +490,28 @@ class _TelaDashboardState extends State<TelaDashboard> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Dashboard & IA"),
           backgroundColor: Colors.blue.shade800,
           foregroundColor: Colors.white,
+          actions: [
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                if (value == 'exportar') {
+                  await _exportarECompartilharCsv();
+                }
+              },
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                const PopupMenuItem<String>(
+                  value: 'exportar',
+                  child: Text('Exportar dados (CSV)'),
+                ),
+              ],
+            ),
+          ],
           bottom: const TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
@@ -413,6 +520,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
               Tab(icon: Icon(Icons.analytics), text: "Curva ABC"),
               Tab(icon: Icon(Icons.show_chart), text: "Fluxo Caixa"),
               Tab(icon: Icon(Icons.auto_awesome), text: "Consultor IA"),
+              Tab(icon: Icon(Icons.trending_up), text: "Estatísticas"),
             ],
           ),
         ),
@@ -475,7 +583,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Text("Debug: Estoque (${estoque.length}) | Vendas (${historicoVendas.length})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                    child: Text("Estoque (${estoque.length}) | Vendas (${historicoVendas.length})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   ),
                   Expanded(
                     child: TabBarView(
@@ -483,6 +591,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                         _buildAbaCurvaABC(),
                         _buildAbaFluxoCaixa(),
                         _buildAbaConsultorIA(),
+                        const EstatisticasAvancadasWidget(),
                       ],
                     ),
                   ),

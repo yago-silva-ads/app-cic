@@ -163,12 +163,12 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                           ...(() {
                             String textEntrada = p.dataEntrada != null 
                               ? "Entrada: ${p.dataEntrada!.day.toString().padLeft(2, '0')}/${p.dataEntrada!.month.toString().padLeft(2, '0')}/${p.dataEntrada!.year}"
-                              : "Entrada não registada";
+                              : "Entrada não registrada";
 
                             Widget validadeWidget;
                             if (p.dataValidade == null) {
                               validadeWidget = Text(
-                                "Validade não registada",
+                                "Validade não registrada",
                                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                               );
                             } else {

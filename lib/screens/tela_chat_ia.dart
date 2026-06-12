@@ -5,6 +5,7 @@ import 'package:flutter_chat_ui/flutter_chat_ui.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
 import 'package:uuid/uuid.dart';
 import '../services/ia_service.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 
 class TelaChatIA extends StatefulWidget {
   final String diagnosticoInicial;
@@ -18,6 +19,7 @@ class _TelaChatIAState extends State<TelaChatIA> {
   List<types.Message> _messages = [];
   final _user = types.User(id: '82091008-a484-4a89-ae75-a22bf8d6f3ac');
   final _ia = types.User(id: 'gemini-ia');
+  bool _iaEscrevendo = false;
 
   @override
   void initState() {
@@ -57,10 +59,34 @@ class _TelaChatIAState extends State<TelaChatIA> {
     final textMessage = types.TextMessage(author: _user, createdAt: DateTime.now().millisecondsSinceEpoch, id: Uuid().v4(), text: message.text);
     _adicionarMensagem(textMessage);
 
+    setState(() => _iaEscrevendo = true);
+
     String historico = _messages.reversed.whereType<types.TextMessage>().map((m) => m.text).join("\n");
     String resposta = await IaService.continuarConversa(historico, message.text);
 
     _adicionarMensagem(types.TextMessage(author: _ia, createdAt: DateTime.now().millisecondsSinceEpoch, id: Uuid().v4(), text: resposta));
+
+    setState(() => _iaEscrevendo = false);
+  }
+
+  Widget _buildTypingIndicator() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.teal.shade100,
+            radius: 16,
+            child: Icon(Icons.auto_awesome, size: 18, color: Colors.teal.shade700),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            "O consultor está digitando...",
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -84,7 +110,38 @@ class _TelaChatIAState extends State<TelaChatIA> {
           )
         ],
       ),
-      body: Chat(messages: _messages, onSendPressed: _handleSendPressed, user: _user),
+      body: Column(
+        children: [
+          Expanded(
+            child: Chat(
+              messages: _messages,
+              onSendPressed: _handleSendPressed,
+              user: _user,
+              textMessageBuilder: (
+                types.TextMessage message, {
+                required int messageWidth,
+                required bool showName,
+              }) {
+                final isUser = message.author.id == _user.id;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: MarkdownBody(
+                    data: message.text,
+                    selectable: true,
+                    styleSheet: MarkdownStyleSheet(
+                      p: TextStyle(color: isUser ? Colors.white : Colors.black87, fontSize: 15),
+                      h1: TextStyle(color: isUser ? Colors.white : Colors.black87, fontSize: 20, fontWeight: FontWeight.bold),
+                      h2: TextStyle(color: isUser ? Colors.white : Colors.black87, fontSize: 18, fontWeight: FontWeight.bold),
+                      listBullet: TextStyle(color: isUser ? Colors.white : Colors.black87),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (_iaEscrevendo) _buildTypingIndicator(),
+        ],
+      ),
     );
   }
 }
