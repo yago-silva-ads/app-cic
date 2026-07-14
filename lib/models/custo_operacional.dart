@@ -14,6 +14,6 @@ class CustoOperacional {
   factory CustoOperacional.fromJson(Map<String, dynamic> json) => CustoOperacional(
         id: json['id'],
         nome: json['nome'],
-        valor: json['valor'],
+        valor: (json['valor'] as num).toDouble(),
       );
 }

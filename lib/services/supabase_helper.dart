@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/produto.dart';
@@ -6,6 +5,9 @@ import '../models/custo_operacional.dart';
 
 class SupabaseHelper {
   static final supabase = Supabase.instance.client;
+
+  /// 🔒 Retorna o ID do usuário logado (usado como empresa_id para multi-tenant)
+  static String get _empresaId => supabase.auth.currentUser!.id;
 
   // Buscar todo o estoque da nuvem
   static Future<List<Produto>> getEstoque() async {
@@ -42,7 +44,7 @@ class SupabaseHelper {
     }
   }
 
-  // Inserir ou Atualizar Produto (Upsert)
+  // Inserir ou Atualizar Produto (Upsert) — 🔒 injeta empresa_id automaticamente
   static Future<void> insertProduto(Produto p) async {
     await supabase.from('produtos').upsert({
       'codigo': p.codigo,
@@ -52,15 +54,15 @@ class SupabaseHelper {
       'valor_compra': p.valorCompra,
       'markup': p.markup,
       'valor_venda': p.valorVenda,
-      // AS TRÊS LINHAS NOVAS AQUI:
       'origem': p.origem,
       'data_entrada': p.dataEntrada?.toIso8601String(),
       'data_validade': p.dataValidade?.toIso8601String(),
       'vendidas': p.vendidas,
+      'empresa_id': _empresaId, // 🔒 Multi-tenant
     }, onConflict: 'codigo');
   }
 
-  // Registrar uma venda no histórico (usado pelo Firebase Analytics e Fluxo de Caixa)
+  // Registrar uma venda no histórico — 🔒 injeta empresa_id automaticamente
   static Future<void> registrarVenda(
     String codigoProduto,
     int qtdVendida,
@@ -70,6 +72,7 @@ class SupabaseHelper {
       'produto_codigo': codigoProduto,
       'quantidade_vendida': qtdVendida,
       'valor_unitario': valorUnid,
+      'empresa_id': _empresaId, // 🔒 Multi-tenant
     });
   }
 
@@ -92,26 +95,63 @@ class SupabaseHelper {
     await supabase.from('produtos').delete().eq('codigo', codigo);
   }
 
+  // Buscar custos operacionais do Supabase (Multi-tenant via RLS)
   static Future<List<CustoOperacional>> getCustosOperacionais() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final String? custosJson = prefs.getString('custos_operacionais_locais');
-      if (custosJson != null) {
-        final List<dynamic> decoded = jsonDecode(custosJson);
-        return decoded.map((json) => CustoOperacional.fromJson(json)).toList();
-      }
-      return [];
+      final response = await supabase
+          .from('custos_operacionais')
+          .select()
+          .order('id', ascending: true);
+      print("Custos operacionais encontrados: ${response.length}"); // DEBUG
+      return (response as List)
+          .map((json) => CustoOperacional.fromJson(json))
+          .toList();
     } catch (e) {
-      print("Erro ao buscar custos operacionais: $e");
+      print("Erro ao buscar custos operacionais do Supabase: $e");
       return [];
     }
   }
 
+  // Substituir/salvar custos operacionais no Supabase (Multi-tenant via RLS)
   static Future<void> replaceCustosOperacionais(
     List<CustoOperacional> custos,
   ) async {
+    // 1. Identificar IDs que ainda existem na nova lista
+    final idsExistentes = custos
+        .where((c) => c.id != null)
+        .map((c) => c.id!)
+        .toList();
+
+    // 2. Apagar do banco os custos desta empresa que foram removidos pelo usuário na tela
+    if (idsExistentes.isNotEmpty) {
+      await supabase
+          .from('custos_operacionais')
+          .delete()
+          .not('id', 'in', idsExistentes);
+    } else {
+      // Se nenhum item da lista possui ID antigo, limpa todos os custos anteriores desta empresa
+      await supabase.from('custos_operacionais').delete().neq('id', -1);
+    }
+
+    // 3. Upsert dos custos (com ID atualiza; sem ID insere novo)
+    if (custos.isNotEmpty) {
+      final data = custos.map((c) => {
+        if (c.id != null) 'id': c.id,
+        'nome': c.nome,
+        'valor': c.valor,
+      }).toList();
+      await supabase.from('custos_operacionais').upsert(data);
+    }
+  }
+
+  /// 🔒 Logout: desconecta do Supabase e limpa dados locais do aparelho
+  /// Isso impede que o próximo usuário veja custos/dados do anterior.
+  static Future<void> signOut() async {
+    // 1. Limpa todos os dados locais (SharedPreferences)
     final prefs = await SharedPreferences.getInstance();
-    final String encoded = jsonEncode(custos.map((c) => c.toJson()).toList());
-    await prefs.setString('custos_operacionais_locais', encoded);
+    await prefs.clear();
+
+    // 2. Desconecta do Supabase Auth (invalida o JWT local)
+    await supabase.auth.signOut();
   }
 }

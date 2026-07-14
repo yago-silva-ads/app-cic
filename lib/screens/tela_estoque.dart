@@ -4,9 +4,11 @@ import '../utils/moeda_formatter.dart';
 import '../services/supabase_helper.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
+import 'tela_login.dart';
 
 class TelaEstoque extends StatefulWidget {
   final List<Produto>? estoque;
@@ -830,6 +832,42 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
               onTap: () {
                 Navigator.pop(context);
                 Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: Icon(Icons.logout, color: Colors.red.shade700),
+              title: Text('Sair', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+              subtitle: Text(
+                Supabase.instance.client.auth.currentUser?.email ?? '',
+                style: const TextStyle(fontSize: 12),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                final confirmar = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Sair da conta'),
+                    content: const Text('Deseja realmente sair? Os dados locais serão limpos.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: Text('Sair', style: TextStyle(color: Colors.red.shade700)),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmar == true && context.mounted) {
+                  await SupabaseHelper.signOut();
+                  if (context.mounted) {
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TelaLogin()),
+                      (_) => false,
+                    );
+                  }
+                }
               },
             ),
           ],

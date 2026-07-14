@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/produto.dart';
 import '../services/supabase_helper.dart';
 import '../services/ia_service.dart';
@@ -9,6 +10,7 @@ import 'leitor_screen.dart';
 import 'tela_estoque.dart';
 import 'tela_vendedor.dart';
 import 'tela_chat_ia.dart';
+import 'tela_login.dart';
 
 class TelaDashboard extends StatefulWidget {
   const TelaDashboard({super.key});
@@ -464,6 +466,42 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: Icon(Icons.logout, color: Colors.red.shade700),
+                title: Text('Sair', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                  Supabase.instance.client.auth.currentUser?.email ?? '',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                onTap: () async {
+                  Navigator.pop(context); // fecha o Drawer
+                  final confirmar = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Sair da conta'),
+                      content: const Text('Deseja realmente sair? Os dados locais serão limpos.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: Text('Sair', style: TextStyle(color: Colors.red.shade700)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmar == true && context.mounted) {
+                    await SupabaseHelper.signOut();
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const TelaLogin()),
+                        (_) => false,
+                      );
+                    }
+                  }
                 },
               ),
             ],

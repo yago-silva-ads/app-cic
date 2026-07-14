@@ -11,6 +11,7 @@ class Produto {
   final DateTime? dataValidade; // ✅ Adicionado (Validade FIFO)
   final Map<String, dynamic>? insumos; // ✅ Adicionado (para produtos fabricados)
   final int vendidas; // ✅ Adicionado (unidades vendidas)
+  final String? empresaId; // 🔒 Multi-tenant: ID da empresa (auth.uid())
 
   Produto({
     required this.codigo,
@@ -25,6 +26,7 @@ class Produto {
     this.dataValidade,
     this.insumos,
     this.vendidas = 0,
+    this.empresaId,
   });
 
   Map<String, dynamic> toJson() => {
@@ -39,6 +41,7 @@ class Produto {
         'data_entrada': dataEntrada?.toIso8601String(),
         'data_validade': dataValidade?.toIso8601String(),
         'vendidas': vendidas,
+        if (empresaId != null) 'empresa_id': empresaId,
       };
 
   factory Produto.fromJson(Map<String, dynamic> json) => Produto(
@@ -55,6 +58,7 @@ class Produto {
         insumos: (json['insumos'] as Map<String, dynamic>?)
             ?.map((k, v) => MapEntry(k, (v as num).toDouble())),
         vendidas: json['vendidas'] ?? 0,
+        empresaId: json['empresa_id'],
       );
 
   double calcularCustoFabricado(List<Produto> todoEstoque) {
