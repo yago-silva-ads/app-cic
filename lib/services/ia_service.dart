@@ -1,6 +1,7 @@
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/produto.dart';
 import '../models/custo_operacional.dart';
+import '../models/alerta.dart';
 import '../secrets.dart';
 
 class IaService {
@@ -8,8 +9,9 @@ class IaService {
   static Future<String> analisarEstoque(
     List<Produto> estoque,
     List<Map<String, dynamic>> historico,
-    List<CustoOperacional> custos,
-  ) async {
+    List<CustoOperacional> custos, {
+    List<Alerta>? alertasAtivos,
+  }) async {
     if (estoque.isEmpty) {
       return "📊 O seu estoque está vazio. Adicione produtos no PDV para gerar um diagnóstico financeiro.";
     }
@@ -36,9 +38,28 @@ class IaService {
 
     buffer.writeln("--- DADOS DE ESTOQUE ---");
     for (var p in estoque.take(20)) {
+      String validadeInfo = '';
+      if (p.dataValidade != null) {
+        final diasRestantes = p.dataValidade!.difference(DateTime.now()).inDays;
+        if (diasRestantes <= 0) {
+          validadeInfo = ' | ⛔ VENCIDO há ${diasRestantes.abs()} dia(s)';
+        } else if (diasRestantes <= 7) {
+          validadeInfo = ' | ⚠️ Vence em $diasRestantes dia(s)';
+        } else if (diasRestantes <= 30) {
+          validadeInfo = ' | 📅 Vence em $diasRestantes dia(s)';
+        }
+      }
       buffer.writeln(
-        "${p.nome} - Custo: R\$${p.valorCompra}, Venda: R\$${p.valorVenda}, Qtd: ${p.quantidade}",
+        "${p.nome} - Custo: R\$${p.valorCompra}, Venda: R\$${p.valorVenda}, Qtd: ${p.quantidade}$validadeInfo",
       );
+    }
+
+    // Se há alertas ativos, inclui no contexto para a IA
+    if (alertasAtivos != null && alertasAtivos.isNotEmpty) {
+      buffer.writeln("\n--- ALERTAS ATIVOS DO SISTEMA ---");
+      for (var a in alertasAtivos.take(10)) {
+        buffer.writeln("[${a.severidade}] ${a.mensagem}");
+      }
     }
 
     buffer.writeln("\n--- HISTÓRICO DE VENDAS RECENTES ---");
@@ -175,5 +196,22 @@ class IaService {
         return "❌ **Falha de Conexão:** Não consegui conectar à internet. Verifique seu Wi-Fi.";
       }
     }
+  }
+
+  /// Gera relatório agendado (para uso com cron/Edge Function)
+  /// Salva automaticamente no banco via SupabaseHelper
+  static Future<String> gerarRelatorioAgendado(
+    List<Produto> estoque,
+    List<Map<String, dynamic>> historico,
+    List<CustoOperacional> custos, {
+    List<Alerta>? alertasAtivos,
+  }) async {
+    final relatorio = await analisarEstoque(
+      estoque,
+      historico,
+      custos,
+      alertasAtivos: alertasAtivos,
+    );
+    return relatorio;
   }
 }

@@ -9,6 +9,10 @@ import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
 import 'tela_login.dart';
+import 'tela_alertas.dart';
+import 'tela_suporte.dart';
+import 'tela_tutorial_web.dart';
+import '../widgets/app_drawer.dart';
 
 class TelaEstoque extends StatefulWidget {
   final List<Produto>? estoque;
@@ -23,6 +27,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
   List<Produto> estoqueLocal = [];
   Map<String, int> vendadasPorProduto = {};
   int clientesHoje = 0;
+  int alertasNaoLidos = 0;
   late TabController _tabController;
 
   @override
@@ -56,6 +61,12 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
         for (var p in estoqueLocal) {
           vendadasPorProduto[p.codigo] = p.vendidas;
         }
+      });
+    }
+    final contagemAlertas = await SupabaseHelper.contarAlertasNaoLidos();
+    if (mounted) {
+      setState(() {
+        alertasNaoLidos = contagemAlertas;
       });
     }
   }
@@ -773,6 +784,44 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
         title: const Text("Estoque Atual"),
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
+        actions: [
+          // Ícone de Alertas / Avisos com Badge
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_active_outlined),
+                tooltip: 'Central de Alertas & Avisos',
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaAlertas())).then((_) => _carregarEstoque());
+                },
+              ),
+              if (alertasNaoLidos > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$alertasNaoLidos',
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          // Ícone de Ajuda e Suporte
+          IconButton(
+            icon: const Icon(Icons.support_agent),
+            tooltip: 'Fale com o Suporte',
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaSuporte()));
+            },
+          ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.white,
@@ -784,95 +833,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
           ],
         ),
       ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(color: Color(0xFF1565C0)),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(color: Colors.white, fontSize: 20),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LeitorScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaDashboard()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: Icon(Icons.logout, color: Colors.red.shade700),
-              title: Text('Sair', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                Supabase.instance.client.auth.currentUser?.email ?? '',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                final confirmar = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Sair da conta'),
-                    content: const Text('Deseja realmente sair? Os dados locais serão limpos.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text('Sair', style: TextStyle(color: Colors.red.shade700)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmar == true && context.mounted) {
-                  await SupabaseHelper.signOut();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TelaLogin()),
-                      (_) => false,
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(),
       body: TabBarView(
         controller: _tabController,
         children: [

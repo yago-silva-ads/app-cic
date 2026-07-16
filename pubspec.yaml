@@ -45,6 +45,10 @@ dependencies:
   flutter_chat_ui: ^1.6.12
   flutter_chat_types: ^3.6.2
   uuid: ^4.5.0
+  data_table_2: ^2.5.0
+  google_fonts: ^6.1.0
+  url_launcher: ^6.3.0
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

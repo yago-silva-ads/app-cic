@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart'; // Import do Firebase gerado pelo CLI
 import 'screens/tela_login.dart';
 import 'screens/tela_dashboard.dart';
+import 'web/tela_dashboard_web.dart';
 
 Future<void> main() async {
   // Garante que os widgets do Flutter estejam prontos
@@ -43,7 +45,14 @@ class _MyAppState extends State<MyApp> {
     Supabase.instance.client.auth.onAuthStateChange.listen((data) {
       final event = data.event;
 
-      if (event == AuthChangeEvent.signedOut) {
+      if (event == AuthChangeEvent.signedIn) {
+        _navigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => kIsWeb ? const TelaDashboardWeb() : const TelaDashboard(),
+          ),
+          (_) => false,
+        );
+      } else if (event == AuthChangeEvent.signedOut) {
         // Sessão encerrada ou token expirou → volta para Login
         _navigatorKey.currentState?.pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const TelaLogin()),
@@ -66,8 +75,10 @@ class _MyAppState extends State<MyApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      // Se logado → Dashboard, senão → Login
-      home: session != null ? const TelaDashboard() : const TelaLogin(),
+      // Se logado → Dashboard (Web ou Mobile), senão → Login
+      home: session != null
+          ? (kIsWeb ? const TelaDashboardWeb() : const TelaDashboard())
+          : const TelaLogin(),
     );
   }
 }

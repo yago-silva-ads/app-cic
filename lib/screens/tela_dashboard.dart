@@ -11,6 +11,8 @@ import 'tela_estoque.dart';
 import 'tela_vendedor.dart';
 import 'tela_chat_ia.dart';
 import 'tela_login.dart';
+import 'tela_tutorial_web.dart';
+import '../widgets/app_drawer.dart';
 
 class TelaDashboard extends StatefulWidget {
   const TelaDashboard({super.key});
@@ -26,6 +28,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
   bool _isAnalyzing = false;
   String? _analiseIA;
   bool _isLoading = true;
+  String _filtroPeriodo = 'Tudo'; // 'Hoje', '7 Dias', 'Mês', 'Tudo'
 
   @override
   void initState() {
@@ -172,8 +175,307 @@ class _TelaDashboardState extends State<TelaDashboard> {
     );
   }
 
+  void _abrirSeletorMesAno(BuildContext context) {
+    final meses = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ];
+    int anoSelecionado = DateTime.now().year;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text("Mês/Ano Específico", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back_ios, size: 16),
+                        onPressed: () => setDialogState(() => anoSelecionado--),
+                      ),
+                      Text("$anoSelecionado", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_forward_ios, size: 16),
+                        onPressed: () => setDialogState(() => anoSelecionado++),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 300,
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 1.8,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemCount: 12,
+                  itemBuilder: (ctx, idx) {
+                    final mesLabel = "${meses[idx]}/$anoSelecionado";
+                    final isCurrent = _filtroPeriodo == mesLabel;
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _filtroPeriodo = mesLabel;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isCurrent ? Colors.blue.shade800 : Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: isCurrent ? Colors.blue.shade900 : Colors.blue.shade200),
+                        ),
+                        child: Text(
+                          meses[idx],
+                          style: TextStyle(
+                            color: isCurrent ? Colors.white : Colors.blue.shade900,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text("Fechar"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Helper para obter nome do mês abreviado em português (ex: Ago/2026)
+  String _obterLabelMes(DateTime dt) {
+    const meses = [
+      'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun',
+      'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'
+    ];
+    return "${meses[dt.month - 1]}/${dt.year}";
+  }
+
+  void _mostrarModalPagarDespesa(BuildContext context) {
+    final nomeController = TextEditingController();
+    final valorController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E1E1E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          20,
+          20,
+          MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "💸 Pagar Funcionário ou Adicionar Despesa",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              "O valor informado será subtraído instantaneamente do seu Saldo em Caixa atual.",
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: nomeController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "Descrição (Ex: Salário Funcionário Carlos, Aluguel, Luz)",
+                labelStyle: const TextStyle(color: Colors.white54),
+                filled: true,
+                fillColor: const Color(0xFF2C2C2C),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: valorController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: "Valor (R\$)",
+                labelStyle: const TextStyle(color: Colors.white54),
+                filled: true,
+                fillColor: const Color(0xFF2C2C2C),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white24,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text(
+                      "Cancelar",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final nome = nomeController.text.trim();
+                      final valor =
+                          double.tryParse(
+                            valorController.text.replaceAll(',', '.'),
+                          ) ??
+                          0.0;
+                      if (nome.isEmpty || valor <= 0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              "Preencha a descrição e um valor válido.",
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.pop(ctx);
+
+                      final novoCusto = CustoOperacional(
+                        nome: nome,
+                        valor: valor,
+                      );
+                      final novosCustos = [...custosOperacionais, novoCusto];
+                      await SupabaseHelper.replaceCustosOperacionais(
+                        novosCustos,
+                      );
+                      _carregarDados();
+
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              "✅ Despesa '$nome' (R\$ ${valor.toStringAsFixed(2)}) abatida do Caixa!",
+                            ),
+                            backgroundColor: const Color(0xFF00C853),
+                          ),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.check, color: Colors.white),
+                    label: const Text(
+                      "Salvar e Abater",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00C853),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAbaFluxoCaixa() {
-    if (historicoVendas.isEmpty) {
+    // 1. Extrair meses distintos históricos dinamicamente
+    final Set<String> mesesHistoricos = {};
+    for (var v in historicoVendas) {
+      if (v['criado_em'] != null) {
+        final dt = DateTime.tryParse(v['criado_em'].toString());
+        if (dt != null) {
+          mesesHistoricos.add(_obterLabelMes(dt));
+        }
+      }
+    }
+    final listaOpcoesPeriodo = [
+      'Hoje',
+      '7 Dias',
+      'Mês',
+      ...mesesHistoricos,
+      'Tudo',
+    ];
+    if (!listaOpcoesPeriodo.contains(_filtroPeriodo)) {
+      listaOpcoesPeriodo.insert(3, _filtroPeriodo);
+    }
+
+    // Filtragem por Período
+    List<Map<String, dynamic>> historicoFiltrado = [];
+    final agora = DateTime.now();
+
+    for (var v in historicoVendas) {
+      DateTime? dataVenda;
+      if (v['criado_em'] != null) {
+        dataVenda = DateTime.tryParse(v['criado_em'].toString());
+      }
+      dataVenda ??= agora;
+
+      bool incluir = true;
+      if (_filtroPeriodo == 'Hoje') {
+        incluir =
+            dataVenda.year == agora.year &&
+            dataVenda.month == agora.month &&
+            dataVenda.day == agora.day;
+      } else if (_filtroPeriodo == '7 Dias') {
+        incluir = agora.difference(dataVenda).inDays <= 7;
+      } else if (_filtroPeriodo == 'Mês') {
+        incluir =
+            dataVenda.year == agora.year && dataVenda.month == agora.month;
+      } else if (_filtroPeriodo != 'Tudo') {
+        // Filtro por Mês/Ano específico (ex: Ago/2026)
+        incluir = _obterLabelMes(dataVenda) == _filtroPeriodo;
+      }
+
+      if (incluir) {
+        historicoFiltrado.add(v);
+      }
+    }
+
+    if (historicoFiltrado.isEmpty && _filtroPeriodo == 'Tudo') {
       return const Center(
         child: Text(
           "Nenhuma venda registrada ainda no Supabase.\nVá em Estoque Atual -> Vendas e registre uma saída!",
@@ -188,68 +490,358 @@ class _TelaDashboardState extends State<TelaDashboard> {
     double faturamentoAcumulado = 0;
     List<Widget> historicoDetalhado = [];
 
-    for (int i = 0; i < historicoVendas.length; i++) {
-      var venda = historicoVendas[i];
-      // Tratamento seguro para os números do Supabase
-      double valorUnitario = double.tryParse(venda['valor_unitario'].toString()) ?? 0.0;
-      int quantidade = int.tryParse(venda['quantidade_vendida'].toString()) ?? 0;
+    for (int i = 0; i < historicoFiltrado.length; i++) {
+      var venda = historicoFiltrado[i];
+      double valorUnitario =
+          double.tryParse(venda['valor_unitario'].toString()) ?? 0.0;
+      int quantidade =
+          int.tryParse(venda['quantidade_vendida'].toString()) ?? 0;
       String codigoProduto = venda['produto_codigo'].toString();
-      
+
       double valorTotalVenda = valorUnitario * quantidade;
       totalFaturamento += valorTotalVenda;
       faturamentoAcumulado += valorTotalVenda;
-      
+
       vendasSpots.add(FlSpot(i.toDouble(), faturamentoAcumulado));
 
-      // Busca o nome do produto na lista de estoque
       String nomeProduto = "Produto Excluído";
       try {
-        nomeProduto = estoque.firstWhere((p) => p.codigo == codigoProduto).nome;
+        nomeProduto =
+            estoque.firstWhere((p) => p.codigo == codigoProduto).nome;
       } catch (_) {}
 
-      // Cria o item da lista (inserindo no topo para os mais recentes aparecerem primeiro)
       historicoDetalhado.insert(
         0,
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: CircleAvatar(
-            backgroundColor: Colors.green.shade100,
-            child: Icon(Icons.check_circle, color: Colors.green.shade700),
+        Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-          title: Text(nomeProduto, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          subtitle: Text("$quantidade un. x R\$ ${valorUnitario.toStringAsFixed(2).replaceAll('.', ',')}", style: const TextStyle(fontSize: 12)),
-          trailing: Text(
-            "+ R\$ ${valorTotalVenda.toStringAsFixed(2).replaceAll('.', ',')}",
-            style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 14),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            leading: CircleAvatar(
+              backgroundColor: Colors.green.shade50,
+              child: Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 24),
+            ),
+            title: Text(
+              nomeProduto,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+            ),
+            subtitle: Padding(
+              padding: const EdgeInsets.only(top: 4.0),
+              child: Text(
+                "$quantidade un. vendidas a R\$ ${valorUnitario.toStringAsFixed(2).replaceAll('.', ',')}",
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  "+ R\$ ${valorTotalVenda.toStringAsFixed(2).replaceAll('.', ',')}",
+                  style: TextStyle(
+                    color: Colors.green.shade700,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  "Venda Realizada",
+                  style: TextStyle(fontSize: 10, color: Colors.green.shade600, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
-    return Padding(
+    double totalCustos = custosOperacionais.fold(0.0, (s, c) => s + c.valor);
+    double saldoCaixa = totalFaturamento - totalCustos;
+    double rentabilidadePct =
+        totalFaturamento > 0
+            ? ((totalFaturamento - totalCustos) / totalFaturamento * 100)
+            : 0.0;
+
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Banner Acesso Rápido ao Tutorial e Portal Web Looker Studio
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.green.shade200),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0D47A1), Color(0xFF1976D2)],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.blue.withValues(alpha: 0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            child: Column(
+            child: Row(
               children: [
-                const Text("Faturamento Total Registrado", style: TextStyle(fontSize: 14, color: Colors.blueGrey)),
-                const SizedBox(height: 8),
-                Text(
-                  "R\$ ${totalFaturamento.toStringAsFixed(2).replaceAll('.', ',')}",
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.green.shade700),
+                const Icon(Icons.language, color: Colors.white, size: 30),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Portal Web Looker Studio & IA",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        "Gráficos, Curva ABC e Acesso no PC",
+                        style: TextStyle(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const TelaTutorialWeb(),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF0D47A1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    "Tutorial / Acessar",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
+
+          // Seletor de Período Flexível (Meses Dinâmicos) + Botão Calendário Mês Específico
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ...listaOpcoesPeriodo.map((periodo) {
+                  final isSelected = _filtroPeriodo == periodo;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(
+                        periodo,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.black87,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      selected: isSelected,
+                      selectedColor: Colors.blue.shade800,
+                      onSelected: (selected) {
+                        if (selected) {
+                          setState(() => _filtroPeriodo = periodo);
+                        }
+                      },
+                    ),
+                  );
+                }),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ActionChip(
+                    avatar: const Icon(Icons.calendar_month, size: 16, color: Colors.blue),
+                    label: const Text(
+                      "📅 Escolher Mês Específico...",
+                      style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+                    ),
+                    backgroundColor: Colors.blue.shade50,
+                    onPressed: () => _abrirSeletorMesAno(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Card de Saldo em Caixa Real + Botão de Pagar Funcionário/Despesa
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors:
+                    saldoCaixa >= 0
+                        ? [Colors.green.shade700, Colors.green.shade900]
+                        : [Colors.red.shade700, Colors.red.shade900],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: (saldoCaixa >= 0 ? Colors.green : Colors.red)
+                      .withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "💰 Saldo em Caixa (Vendas - Custos)",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        "Rentabilidade: ${rentabilidadePct.toStringAsFixed(1)}%",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  "R\$ ${saldoCaixa.toStringAsFixed(2).replaceAll('.', ',')}",
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Faturamento: R\$ ${totalFaturamento.toStringAsFixed(2)} | Custos: R\$ ${totalCustos.toStringAsFixed(2)}",
+                  style: const TextStyle(fontSize: 12, color: Colors.white60),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _mostrarModalPagarDespesa(context),
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                        label: const Text(
+                          "Pagar Funcionário / Saída",
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.25),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const TelaVendedor(),
+                          ),
+                        ).then((_) => _carregarDados());
+                      },
+                      icon: const Icon(Icons.edit, color: Colors.white),
+                      tooltip: "Editar todos os custos",
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.white.withValues(alpha: 0.25),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Card de Faturamento do Período
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Vendas ($_filtroPeriodo)", style: const TextStyle(fontSize: 13, color: Colors.blueGrey)),
+                    const SizedBox(height: 4),
+                    Text(
+                      "R\$ ${totalFaturamento.toStringAsFixed(2).replaceAll('.', ',')}",
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue.shade800),
+                    ),
+                  ],
+                ),
+                Icon(Icons.trending_up, color: Colors.blue.shade800, size: 32),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
           const Text("Evolução do Faturamento", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
           const SizedBox(height: 8),
           SizedBox(
@@ -292,11 +884,17 @@ class _TelaDashboardState extends State<TelaDashboard> {
           const SizedBox(height: 24),
           const Text("Detalhamento das Vendas", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
           const Divider(),
-          Expanded(
-            child: ListView(
-              children: historicoDetalhado,
-            ),
-          ),
+          historicoDetalhado.isEmpty
+              ? Container(
+                  padding: const EdgeInsets.all(24),
+                  alignment: Alignment.center,
+                  child: const Text("Nenhuma venda registrada neste período.", style: TextStyle(color: Colors.blueGrey)),
+                )
+              : ListView(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: historicoDetalhado,
+                ),
           if (_analiseIA != null) ...[
             const SizedBox(height: 16),
             ElevatedButton.icon(
@@ -418,95 +1016,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
             ],
           ),
         ),
-        drawer: Drawer(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              SizedBox(
-                height: MediaQuery.sizeOf(context).height * 0.1,
-                child: DrawerHeader(
-                  margin: EdgeInsets.zero,
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  decoration: const BoxDecoration(color: Color(0xFF1565C0)),
-                  child: const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Menu',
-                      style: TextStyle(color: Colors.white, fontSize: 20),
-                    ),
-                  ),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.home),
-                title: const Text('Página Inicial'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LeitorScreen()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.pie_chart),
-                title: const Text('Dashboard Inteligente'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.list),
-                title: const Text('Estoque Atual'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaEstoque()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.attach_money),
-                title: const Text('Custos Operacionais'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const TelaVendedor()));
-                },
-              ),
-              const Divider(),
-              ListTile(
-                leading: Icon(Icons.logout, color: Colors.red.shade700),
-                title: Text('Sair', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                  Supabase.instance.client.auth.currentUser?.email ?? '',
-                  style: const TextStyle(fontSize: 12),
-                ),
-                onTap: () async {
-                  Navigator.pop(context); // fecha o Drawer
-                  final confirmar = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Sair da conta'),
-                      content: const Text('Deseja realmente sair? Os dados locais serão limpos.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: Text('Sair', style: TextStyle(color: Colors.red.shade700)),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirmar == true && context.mounted) {
-                    await SupabaseHelper.signOut();
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const TelaLogin()),
-                        (_) => false,
-                      );
-                    }
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
+        drawer: const AppDrawer(),
         body: _isLoading 
             ? const Center(child: CircularProgressIndicator()) 
             : Column(

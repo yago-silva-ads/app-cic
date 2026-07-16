@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'tela_dashboard.dart';
+import '../web/tela_dashboard_web.dart';
 
 class TelaLogin extends StatefulWidget {
   const TelaLogin({super.key});
@@ -139,7 +141,9 @@ class _TelaLoginState extends State<TelaLogin> {
   void _navegarParaDashboard() {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => const TelaDashboard()),
+      MaterialPageRoute(
+        builder: (_) => kIsWeb ? const TelaDashboardWeb() : const TelaDashboard(),
+      ),
     );
   }
 

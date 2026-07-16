@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -11,6 +12,7 @@ import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
 import 'tela_login.dart';
+import '../widgets/app_drawer.dart';
 
 class LeitorScreen extends StatefulWidget {
   const LeitorScreen({super.key});
@@ -27,6 +29,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
     formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8],
   );
 
+  final TextEditingController codigoManualController = TextEditingController();
   final TextEditingController nomeController = TextEditingController();
   final TextEditingController loteController = TextEditingController();
   final TextEditingController quantidadeController = TextEditingController();
@@ -247,6 +250,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _limpar() {
     setState(() {
       codigoLido = 'A aguardar leitura...';
+      codigoManualController.clear();
       nomeController.clear();
       loteController.clear();
       quantidadeController.clear();
@@ -265,109 +269,89 @@ class _LeitorScreenState extends State<LeitorScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Leitor CIC 2026')),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(color: Color(0xFF1565C0)),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(color: Colors.white, fontSize: 20),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TelaDashboard(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaEstoque()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: Icon(Icons.logout, color: Colors.red.shade700),
-              title: Text('Sair', style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.bold)),
-              subtitle: Text(
-                Supabase.instance.client.auth.currentUser?.email ?? '',
-                style: const TextStyle(fontSize: 12),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                final confirmar = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Sair da conta'),
-                    content: const Text('Deseja realmente sair? Os dados locais serão limpos.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: Text('Sair', style: TextStyle(color: Colors.red.shade700)),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmar == true && context.mounted) {
-                  await SupabaseHelper.signOut();
-                  if (context.mounted) {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const TelaLogin()),
-                      (_) => false,
-                    );
-                  }
-                }
-              },
-            ),
-          ],
-        ),
-      ),
+      drawer: const AppDrawer(),
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Card de Entrada Direta / Leitor USB / Digitação Rápida (Essencial no Web & Mobile)
+            Container(
+              margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade300, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_scanner, color: Color(0xFF0D47A1)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: codigoManualController,
+                      decoration: const InputDecoration(
+                        hintText: 'Digite ou Bipe (Leitor USB) o EAN/GS1...',
+                        border: InputBorder.none,
+                        isDense: true,
+                        hintStyle: TextStyle(fontSize: 13),
+                      ),
+                      keyboardType: TextInputType.text,
+                      onSubmitted: (val) {
+                        final code = val.trim();
+                        if (code.isNotEmpty) {
+                          setState(() => codigoLido = code);
+                          scannerController.stop();
+                          validarGS1(code);
+                        }
+                      },
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final code = codigoManualController.text.trim();
+                      if (code.isNotEmpty) {
+                        setState(() => codigoLido = code);
+                        scannerController.stop();
+                        validarGS1(code);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D47A1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Consultar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+
+            // Aviso explicativo de câmera para Versão Web / PC
+            if (kIsWeb)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 18, color: Colors.black87),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Dica Web/PC: Use o campo acima com Leitor USB ou digite o código se a câmera do navegador estiver bloqueada.",
+                        style: TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             SizedBox(
               height: 200,
               child: MobileScanner(
@@ -398,11 +382,26 @@ class _LeitorScreenState extends State<LeitorScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                  onPressed: () => scannerController.toggleTorch(),
-                  icon: const Icon(Icons.flashlight_on, color: Colors.amber),
-                  tooltip: 'Ligar/Desligar Flash',
-                ),
+                if (kIsWeb)
+                  TextButton.icon(
+                    onPressed: () {
+                      scannerController.start();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Solicitando acesso à câmera ao navegador..."),
+                          backgroundColor: Colors.blue,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.videocam, size: 16, color: Colors.blue),
+                    label: const Text("Ativar Câmera Web", style: TextStyle(color: Colors.blue)),
+                  )
+                else
+                  IconButton(
+                    onPressed: () => scannerController.toggleTorch(),
+                    icon: const Icon(Icons.flashlight_on, color: Colors.amber),
+                    tooltip: 'Ligar/Desligar Flash',
+                  ),
                 TextButton.icon(
                   onPressed: () {
                     setState(() => codigoLido = "7891721201806");
