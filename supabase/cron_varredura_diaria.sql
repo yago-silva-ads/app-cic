@@ -37,9 +37,10 @@ BEGIN
           AND data_validade <= CURRENT_DATE + INTERVAL '30 days'
           AND ativo = true
     LOOP
-        v_dias_restantes := v_produto.data_validade - CURRENT_DATE;
+        v_dias_restantes := (v_produto.data_validade::DATE - CURRENT_DATE::DATE);
 
         -- Determina severidade
+
         IF v_dias_restantes <= 0 THEN
             v_severidade := 'CRITICO';
             v_mensagem := format(

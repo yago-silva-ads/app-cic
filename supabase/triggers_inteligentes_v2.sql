@@ -29,9 +29,10 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    v_dias_restantes := NEW.data_validade - CURRENT_DATE;
+    v_dias_restantes := (NEW.data_validade::DATE - CURRENT_DATE::DATE);
 
     -- Só gera alerta se vence em 30 dias ou menos
+
     IF v_dias_restantes > 30 THEN
         RETURN NEW;
     END IF;

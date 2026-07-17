@@ -211,8 +211,11 @@ class IaService {
             if (details != null && details.isNotEmpty) {
               reason = details[0]['reason'] ?? '';
             }
+            if (reason.contains('API_KEY_SERVICE_BLOCKED') || msg.contains('API_KEY_SERVICE_BLOCKED')) {
+              return "🛑 **Serviço da API Bloqueado (`API_KEY_SERVICE_BLOCKED`):**\n\nO Google recusou a requisição porque **o serviço Generative Language API não está habilitado ou está restrito para esta chave/projeto**.\n\n**Como resolver (na aba do Google AI Studio que você abriu):**\n1. Acesse `aistudio.google.com/api-keys`\n2. Clique em **\"Criar chave de API\" (`Create API key`)** -> escolha **\"Criar em novo projeto\" (`Create in new project`)**.\n3. O Google gerará uma chave limpa (formato `AIzaSy...`) com a API já habilitada sem bloqueios (`API_KEY_SERVICE_BLOCKED`).\n4. Cole a nova chave no seu `secrets.dart`.";
+            }
             if (resp.statusCode == 401 || reason.contains('ACCESS_TOKEN_TYPE_UNSUPPORTED') || msg.contains('invalid authentication credentials')) {
-              return "⚠️ **Credenciais de Autenticação Recusadas (401 - $reason):**\n\nO servidor do Google informou:\n\"$msg\"\n\n*Explicação:* As requisições diretas para `generateContent` exigem uma Chave de API gerada no Google AI Studio (formato `AIzaSy...`). A chave atual configurada no `secrets.dart` (`AQ.Ab...`) é um Token OAuth/Outro Serviço que não é aceito diretamente nessa chamada (`ACCESS_TOKEN_TYPE_UNSUPPORTED`).";
+              return "⚠️ **Credenciais de Autenticação Recusadas (401 - $reason):**\n\nO servidor do Google informou:\n\"$msg\"\n\n*Nota:* Se você gerou uma chave nova e ela ainda começa com `AQ.Ab...`, o Google a identifica como Token OAuth/Serviço restrito e retorna `$reason`. Para chamadas diretas da IA Gemini, utilize uma chave de API do Google AI Studio (formato `AIzaSy...`).";
             }
             return "⚠️ **Erro na Chave/API (${resp.statusCode}):** $msg";
           } catch (_) {
