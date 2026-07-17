@@ -1,21 +1,13 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
-import '../models/custo_operacional.dart';
-import '../services/db_helper.dart';
-=======
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/custo_operacional.dart';
 import '../services/supabase_helper.dart';
->>>>>>> fix/ui-overflow-and-ia-bearer
 import '../utils/moeda_formatter.dart';
 import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_estoque.dart';
-<<<<<<< HEAD
-=======
 import 'tela_login.dart';
 import '../widgets/app_drawer.dart';
->>>>>>> fix/ui-overflow-and-ia-bearer
 
 class TelaVendedor extends StatefulWidget {
   const TelaVendedor({super.key});
@@ -25,11 +17,7 @@ class TelaVendedor extends StatefulWidget {
 }
 
 class _CustoEntry {
-<<<<<<< HEAD
-  int? id;
-=======
   String? id; // UUID no Supabase (era int?)
->>>>>>> fix/ui-overflow-and-ia-bearer
   final TextEditingController nomeController;
   final TextEditingController valorController;
 
@@ -40,10 +28,6 @@ class _CustoEntry {
   });
 }
 
-<<<<<<< HEAD
-=======
-
->>>>>>> fix/ui-overflow-and-ia-bearer
 class _TelaVendedorState extends State<TelaVendedor> {
   List<_CustoEntry> custoEntries = [];
   bool _carregando = true;
@@ -55,32 +39,6 @@ class _TelaVendedorState extends State<TelaVendedor> {
   }
 
   Future<void> _carregarCustos() async {
-<<<<<<< HEAD
-    final custos = await DBHelper.instance.getCustosOperacionais();
-    setState(() {
-      if (custos.isEmpty) {
-        custoEntries = [
-          _CustoEntry(
-            nomeController: TextEditingController(),
-            valorController: TextEditingController(),
-          ),
-        ];
-      } else {
-        custoEntries = custos
-            .map(
-              (custo) => _CustoEntry(
-                id: custo.id,
-                nomeController: TextEditingController(text: custo.nome),
-                valorController: TextEditingController(
-                  text: custo.valor.toStringAsFixed(2).replaceAll('.', ','),
-                ),
-              ),
-            )
-            .toList();
-      }
-      _carregando = false;
-    });
-=======
     try {
       final custos = await SupabaseHelper.getCustosOperacionais();
       setState(() {
@@ -109,7 +67,6 @@ class _TelaVendedorState extends State<TelaVendedor> {
     } catch (e) {
       setState(() => _carregando = false);
     }
->>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   void _adicionarCusto() {
@@ -146,38 +103,6 @@ class _TelaVendedorState extends State<TelaVendedor> {
   }
 
   Future<void> _salvarCustos() async {
-<<<<<<< HEAD
-    final listaSalva = <CustoOperacional>[];
-    for (var entry in custoEntries) {
-      final nome = entry.nomeController.text.trim();
-      final valor = double.tryParse(
-        entry.valorController.text.replaceAll('.', '').replaceAll(',', '.'),
-      );
-
-      if (nome.isEmpty && (entry.valorController.text.trim().isEmpty)) {
-        continue;
-      }
-
-      listaSalva.add(
-        CustoOperacional(
-          id: entry.id,
-          nome: nome.isEmpty ? 'Custo Operacional' : nome,
-          valor: valor ?? 0,
-        ),
-      );
-    }
-
-    await DBHelper.instance.replaceCustosOperacionais(listaSalva);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Custos operacionais salvos com sucesso!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-    await _carregarCustos();
-=======
     try {
       final listaSalva = <CustoOperacional>[];
       for (var entry in custoEntries) {
@@ -221,7 +146,6 @@ class _TelaVendedorState extends State<TelaVendedor> {
         );
       }
     }
->>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   @override
@@ -241,79 +165,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
       ),
-<<<<<<< HEAD
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1565C0),
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LeitorScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const TelaEstoque(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
-=======
       drawer: const AppDrawer(),
->>>>>>> fix/ui-overflow-and-ia-bearer
       body: _carregando
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

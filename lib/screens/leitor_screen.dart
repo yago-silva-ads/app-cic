@@ -11,11 +11,8 @@ import '../services/api_service.dart';
 import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
-<<<<<<< HEAD
-=======
 import 'tela_login.dart';
 import '../widgets/app_drawer.dart';
->>>>>>> fix/ui-overflow-and-ia-bearer
 
 class LeitorScreen extends StatefulWidget {
   const LeitorScreen({super.key});
@@ -44,11 +41,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   ); // Lucro de 100% por padrão
   final TextEditingController valorVendaController = TextEditingController();
 
-<<<<<<< HEAD
-  String tipoProdutoSelecionado = 'revendido'; // Novo campo
-=======
   String tipoProdutoSelecionado = 'Revendido';
->>>>>>> fix/ui-overflow-and-ia-bearer
 
   List<Produto> bancoDeEstoque = [];
 
@@ -234,14 +227,10 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompra: valor,
       markup: markup,
       valorVenda: valorVenda,
-<<<<<<< HEAD
-      tipoProduto: tipoProdutoSelecionado,
-=======
       origem:
           tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
       dataValidade: _dataValidadeSelecionada,
       dataEntrada: DateTime.now(), // <-- Registro automático do momento da entrada
->>>>>>> fix/ui-overflow-and-ia-bearer
     );
 
     await SupabaseHelper.insertProduto(novoProduto);
@@ -269,13 +258,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompraController.clear();
       markupController.text = '2.0';
       valorVendaController.clear();
-<<<<<<< HEAD
-      tipoProdutoSelecionado = 'revendido';
-=======
       tipoProdutoSelecionado = 'Revendido';
       _alertaMargem = false;
       _dataValidadeSelecionada = null;
->>>>>>> fix/ui-overflow-and-ia-bearer
     });
 
     scannerController.start();
@@ -284,86 +269,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-<<<<<<< HEAD
-      appBar: AppBar(
-        title: const Text('Leitor CIC 2026'),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1565C0),
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TelaEstoque(
-                      estoque: bancoDeEstoque,
-                      onUpdate: _atualizarTela,
-                    ),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-=======
       appBar: AppBar(title: const Text('Leitor CIC 2026')),
       drawer: const AppDrawer(),
->>>>>>> fix/ui-overflow-and-ia-bearer
       body: SingleChildScrollView(
         child: Column(
           children: [
@@ -538,31 +445,18 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-<<<<<<< HEAD
-                    initialValue: tipoProdutoSelecionado,
-=======
                     value: tipoProdutoSelecionado,
->>>>>>> fix/ui-overflow-and-ia-bearer
                     decoration: const InputDecoration(
                       labelText: 'Tipo de Produto',
                     ),
                     items: const [
                       DropdownMenuItem(
-<<<<<<< HEAD
-                        value: 'revendido',
+                        value: 'Revendido',
                         child: Text('Revendido'),
                       ),
                       DropdownMenuItem(
-                        value: 'produzido',
-                        child: Text('Produzido'),
-=======
-                      value: 'Revendido',
-                        child: Text('Revendido'),
-                      ),
-                      DropdownMenuItem(
-                      value: 'Fabricado',
-                      child: Text('Fabricado'),
->>>>>>> fix/ui-overflow-and-ia-bearer
+                        value: 'Fabricado',
+                        child: Text('Fabricado'),
                       ),
                     ],
                     onChanged: (value) {
@@ -572,10 +466,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
-<<<<<<< HEAD
-
-=======
->>>>>>> fix/ui-overflow-and-ia-bearer
                   Row(
                     children: [
                       Expanded(
@@ -592,13 +482,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
-<<<<<<< HEAD
-                          decoration: const InputDecoration(labelText: 'Quantidade'),
-=======
                           decoration: const InputDecoration(
                             labelText: 'Quantidade em Estoque',
                           ),
->>>>>>> fix/ui-overflow-and-ia-bearer
                         ),
                       ),
                     ],
@@ -691,13 +577,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
                             Expanded(
                               child: TextField(
                                 controller: markupController,
-<<<<<<< HEAD
-                                keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: 'Margem (Ex: 2.0)',
-=======
                                 keyboardType:
                                     const TextInputType.numberWithOptions(
                                       decimal: true,
@@ -711,7 +590,6 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                           ),
                                         )
                                       : null,
->>>>>>> fix/ui-overflow-and-ia-bearer
                                 ),
                               ),
                             ),

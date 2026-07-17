@@ -1,12 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
-<<<<<<< HEAD
-import '../services/db_helper.dart';
-import 'leitor_screen.dart';
-import 'tela_dashboard.dart';
-import 'tela_vendedor.dart';
-=======
 import '../services/supabase_helper.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -19,7 +13,6 @@ import 'tela_alertas.dart';
 import 'tela_suporte.dart';
 import 'tela_tutorial_web.dart';
 import '../widgets/app_drawer.dart';
->>>>>>> fix/ui-overflow-and-ia-bearer
 
 class TelaEstoque extends StatefulWidget {
   final List<Produto>? estoque;
@@ -30,24 +23,16 @@ class TelaEstoque extends StatefulWidget {
   State<TelaEstoque> createState() => _TelaEstoqueState();
 }
 
-<<<<<<< HEAD
-class _TelaEstoqueState extends State<TelaEstoque> {
-  List<Produto> estoqueLocal = [];
-=======
 class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin {
   List<Produto> estoqueLocal = [];
   Map<String, int> vendadasPorProduto = {};
   int clientesHoje = 0;
   int alertasNaoLidos = 0;
   late TabController _tabController;
->>>>>>> fix/ui-overflow-and-ia-bearer
 
   @override
   void initState() {
     super.initState();
-<<<<<<< HEAD
-    _carregarEstoque();
-=======
     _tabController = TabController(length: 2, vsync: this);
     _carregarEstoque();
     _carregarClientesHoje();
@@ -57,22 +42,12 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
   void dispose() {
     _tabController.dispose();
     super.dispose();
->>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   Future<void> _carregarEstoque() async {
     if (widget.estoque != null) {
       setState(() {
         estoqueLocal = widget.estoque!;
-<<<<<<< HEAD
-      });
-    } else {
-      final produtos = await DBHelper.instance.getEstoque();
-      setState(() {
-        estoqueLocal = produtos;
-      });
-    }
-=======
         // Carregar vendidas do banco
         for (var p in estoqueLocal) {
           vendadasPorProduto[p.codigo] = p.vendidas;
@@ -109,7 +84,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     setState(() {
       clientesHoje = novoValor;
     });
->>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   void _onUpdate() {
@@ -119,8 +93,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     }
   }
 
-<<<<<<< HEAD
-=======
   // ==================== ABAS ====================
 
   Widget _buildAbaInventario() {
@@ -615,7 +587,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
           );
   }
 
->>>>>>> fix/ui-overflow-and-ia-bearer
+
   void _edit(int index) {
     Produto p = estoqueLocal[index];
     TextEditingController n = TextEditingController(text: p.nome);
@@ -632,11 +604,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     TextEditingController vendaCtrl = TextEditingController(
       text: p.valorVenda.toStringAsFixed(2).replaceAll('.', ','),
     );
-<<<<<<< HEAD
-    String tipoSelecionado = p.tipoProduto;
-=======
     String tipoSelecionado = (p.origem.toLowerCase() == 'fabricado' || p.origem.toLowerCase() == 'produzido') ? 'Fabricado' : 'Revendido';
->>>>>>> fix/ui-overflow-and-ia-bearer
 
     showDialog(
       context: context,
@@ -674,11 +642,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                   TextField(
                     controller: q,
                     keyboardType: TextInputType.number,
-<<<<<<< HEAD
-                    decoration: const InputDecoration(labelText: "Quantidade"),
-=======
                     decoration: const InputDecoration(labelText: "Quantidade em Estoque"),
->>>>>>> fix/ui-overflow-and-ia-bearer
                   ),
                   TextField(
                     controller: custoCtrl,
@@ -693,14 +657,9 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-<<<<<<< HEAD
-                    decoration: const InputDecoration(
-                      labelText: "Margem (Ex: 2.0)",
-=======
                     decoration: InputDecoration(
                       labelText: "Margem de Lucro (Markup)",
                       errorText: margemSeguraModal ? null : '⚠️ Margem muito baixa!',
->>>>>>> fix/ui-overflow-and-ia-bearer
                     ),
                     onChanged: (_) =>
                         recalcularVenda(), 
@@ -817,17 +776,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     codigo: p.codigo,
                     nome: n.text,
                     lote: p.lote,
-<<<<<<< HEAD
-                    quantidade: int.parse(q.text),
-                    valorCompra: double.parse(
-                      custoCtrl.text.replaceAll('.', '').replaceAll(',', '.'),
-                    ),
-                    markup: double.parse(markupCtrl.text.replaceAll(',', '.')),
-                    valorVenda: double.parse(
-                      vendaCtrl.text.replaceAll('.', '').replaceAll(',', '.'),
-                    ),
-                    tipoProduto: tipoSelecionado,
-=======
                     quantidade: parsedQtd,
                     valorCompra: parsedCusto,
                     markup: parsedMarkup,
@@ -835,18 +783,10 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                     dataValidade: validadeModal,
                     dataEntrada: p.dataEntrada ?? DateTime.now(), // Registra a entrada original!
                     origem: tipoSelecionado,
->>>>>>> fix/ui-overflow-and-ia-bearer
                   );
 
                   await SupabaseHelper.insertProduto(produtoAtualizado);
 
-<<<<<<< HEAD
-                  setState(() {
-                    estoqueLocal[index] = produtoAtualizado;
-                  });
-
-=======
->>>>>>> fix/ui-overflow-and-ia-bearer
                   _onUpdate();
                   if (mounted) Navigator.pop(ctx);
                 },
@@ -864,110 +804,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text("Estoque Atual"),
-<<<<<<< HEAD
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1565C0),
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LeitorScreen()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      body: estoqueLocal.isEmpty
-          ? const Center(child: Text("Estoque vazio."))
-          : ListView.builder(
-              itemCount: estoqueLocal.length,
-              itemBuilder: (ctx, i) {
-                final p = estoqueLocal[i];
-                return Dismissible(
-                  key: Key(p.codigo + i.toString()),
-                  direction: DismissDirection.endToStart,
-                  onDismissed: (_) async {
-                    // Apaga do banco SQLite
-                    await DBHelper.instance.deleteProduto(p.codigo);
-
-                    // Remove da tela
-                    setState(() => estoqueLocal.removeAt(i));
-                    _onUpdate();
-                  },
-                  background: Container(
-                    color: Colors.red,
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20),
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(Icons.inventory_2),
-                    title: Text(p.nome),
-
-                    subtitle: Text(
-                      "Tipo: ${p.tipoProduto == 'revendido' ? 'Revendido' : 'Produzido'} | Qtd: ${p.quantidade} | Custo: R\$ ${p.valorCompra.toStringAsFixed(2).replaceAll('.', ',')} | Venda: R\$ ${p.valorVenda.toStringAsFixed(2).replaceAll('.', ',')}",
-                      style: const TextStyle(fontSize: 13),
-                    ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () => _edit(i),
-=======
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
         actions: [
@@ -994,7 +830,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                       '$alertasNaoLidos',
                       style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                       textAlign: TextAlign.center,
->>>>>>> fix/ui-overflow-and-ia-bearer
                     ),
                   ),
                 ),

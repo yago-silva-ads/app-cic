@@ -1,6 +1,4 @@
 {
-  "buildCommand": "if [ ! -d flutter ]; then git clone https://github.com/flutter/flutter.git -b stable --depth 1; fi && if [ ! -f lib/secrets.dart ]; then echo \"class Secrets { static const String geminiApiKey = '${GEMINI_API_KEY}'; }\" > lib/secrets.dart; fi && if [ ! -f .env ]; then echo \"API_KEY=${GEMINI_API_KEY}\" > .env; fi && ./flutter/bin/flutter build web --release",
-  "outputDirectory": "build/web",
   "rewrites": [
     {
       "source": "/(.*)",
