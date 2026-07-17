@@ -567,7 +567,16 @@ class _TelaDashboardState extends State<TelaDashboard> {
       );
     }
 
-    double totalCustos = custosOperacionais.fold(0.0, (s, c) => s + c.valor);
+    double totalCustosMensal = custosOperacionais.fold(0.0, (s, c) => s + c.valor);
+    // Proporcionalizar custos operacionais conforme o período selecionado
+    double totalCustos;
+    if (_filtroPeriodo == 'Hoje') {
+      totalCustos = totalCustosMensal / 30.0; // Custo diário
+    } else if (_filtroPeriodo == '7 Dias') {
+      totalCustos = totalCustosMensal * 7 / 30.0; // Custo semanal
+    } else {
+      totalCustos = totalCustosMensal; // Mês inteiro ou 'Tudo'
+    }
     double saldoCaixa = totalFaturamento - totalCustos;
     double rentabilidadePct =
         totalFaturamento > 0
@@ -718,14 +727,18 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      "💰 Saldo em Caixa (Vendas - Custos)",
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w600,
+                    const Expanded(
+                      child: Text(
+                        "💰 Saldo em Caixa (Vendas - Custos)",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white70,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,

@@ -38,9 +38,10 @@ class Produto {
         'markup': markup,
         'valorVenda': valorVenda,
         'origem': origem,
-        'data_entrada': dataEntrada?.toIso8601String(),
-        'data_validade': dataValidade?.toIso8601String(),
+        'data_entrada': dataEntrada?.toIso8601String().split('T')[0],
+        'data_validade': dataValidade?.toIso8601String().split('T')[0],
         'vendidas': vendidas,
+
         if (empresaId != null) 'empresa_id': empresaId,
       };
 

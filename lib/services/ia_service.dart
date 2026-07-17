@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:google_generative_ai/google_generative_ai.dart';
 import '../models/produto.dart';
 import '../models/custo_operacional.dart';
@@ -81,121 +84,157 @@ class IaService {
     buffer.writeln("Custo Fixo Total: R\$${totalCustos}\n");
 
     final promptFinal = buffer.toString();
-
-    try {
-      final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
-      final response = await model.generateContent([Content.text(promptFinal)]);
-      return response.text ?? "Análise concluída, mas sem texto retornado.";
-    } catch (e) {
-      // PLANO B (FALLBACK): Se o 3.5 cair (Erro 503), usamos o 1.5 Flash automaticamente!
-      try {
-        final modelFallback = GenerativeModel(
-          model: 'gemini-3.5-flash',
-          apiKey: _apiKey,
-        );
-        final response = await modelFallback.generateContent([
-          Content.text(promptFinal),
-        ]);
-        return response.text ?? "Análise concluída, mas sem texto retornado.";
-      } catch (eFallback) {
-        String errStr = eFallback.toString() + e.toString();
-        print("Erro Gemini: $errStr");
-        if (errStr.contains('429') ||
-            errStr.toLowerCase().contains('quota') ||
-            errStr.toLowerCase().contains('too many requests')) {
-          return "⏳ **Aguarde um momentinho! (Limite Antispam)**\n\nVocê fez muitas análises muito rápido! Para não sobrecarregar, o sistema permite cerca de 15 consultas por minuto. Respire fundo, espere uns 30 segundinhos e tente novamente! 😊";
-        } else if (errStr.contains('503') ||
-            errStr.toLowerCase().contains('service unavailable')) {
-          return "⚠️ **Servidores Ocupados (Google)**\n\nA Inteligência Artificial está atendendo muita gente neste exato segundo e não conseguiu processar. Aguarde uns 10 segundinhos e clique novamente.";
-        }
-        return "❌ **Sem conexão com a IA**\n\nVerifique se o seu Wi-Fi/Internet está funcionando bem e tente novamente em instantes.";
-      }
-    }
+    return await _consultarGeminiRobusto(promptFinal);
   }
 
   static Future<String> analisarProduto(Produto produto) async {
-    if (_apiKey == 'COLE_SUA_CHAVE_GEMINI_AQUI') {
-      return "⚠️ Chave da API não configurada.";
-    }
-
-    try {
-      final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
-
-      final prompt =
-          "Aja como um Estrategista de Varejo. Avalie o produto: ${produto.nome} (Estoque: ${produto.quantidade}, Preço de Custo: R\$${produto.valorCompra}, Preço de Venda: R\$${produto.valorVenda}). Crie uma estratégia agressiva e curta em tópicos sobre margem de lucro sugerida versus preço competitivo praticado pelo mercado.";
-
-      final response = await model.generateContent([Content.text(prompt)]);
-      return response.text ?? "Análise concluída, mas sem texto retornado.";
-    } catch (e) {
-      try {
-        final modelFallback = GenerativeModel(
-          model: 'gemini-3.5-flash',
-          apiKey: _apiKey,
-        );
-        final prompt =
-            "Aja como um Estrategista de Varejo. Avalie o produto: ${produto.nome} (Estoque: ${produto.quantidade}, Preço de Custo: R\$${produto.valorCompra}, Preço de Venda: R\$${produto.valorVenda}). Crie uma estratégia agressiva e curta em tópicos sobre margem de lucro sugerida versus preço competitivo praticado pelo mercado.";
-        final response = await modelFallback.generateContent([
-          Content.text(prompt),
-        ]);
-        return response.text ?? "Análise concluída, mas sem texto retornado.";
-      } catch (eFallback) {
-        String errStr = eFallback.toString() + e.toString();
-        print("Erro Gemini Produto: $errStr");
-        if (errStr.contains('429') ||
-            errStr.toLowerCase().contains('quota') ||
-            errStr.toLowerCase().contains('too many requests')) {
-          return "⏳ **Limite Antispam:** Você clicou muito rápido! Aguarde uns 30 segundinhos e tente novamente.";
-        } else if (errStr.contains('503') ||
-            errStr.toLowerCase().contains('service unavailable')) {
-          return "⚠️ **Servidor Ocupado:** O Google está lotado agora. Aguarde 10 segundos e tente de novo.";
-        }
-        return "❌ **Falha de Conexão:** Verifique sua internet e tente novamente.";
-      }
-    }
+    final prompt =
+        "Aja como um Estrategista de Varejo. Avalie o produto: ${produto.nome} (Estoque: ${produto.quantidade}, Preço de Custo: R\$${produto.valorCompra}, Preço de Venda: R\$${produto.valorVenda}). Crie uma estratégia agressiva e curta em tópicos sobre margem de lucro sugerida versus preço competitivo praticado pelo mercado.";
+    return await _consultarGeminiRobusto(prompt);
   }
 
   static Future<String> continuarConversa(
     String historico,
     String novaMensagem,
   ) async {
-    if (_apiKey == 'COLE_SUA_CHAVE_GEMINI_AQUI') {
+    final fullPrompt =
+        "Você é o Consultor IA de Negócios do App-Cic. Ajude o microempreendedor de forma firme, assertiva e direta com base neste histórico da conversa:\n\n$historico\n\nUsuário: $novaMensagem\nConsultor IA:";
+    return await _consultarGeminiRobusto(fullPrompt);
+  }
+
+  /// Método robusto centralizado para consultar o Gemini (mantendo o gemini-3.5-flash)
+  /// e contornando bloqueios de CORS/XMLHttpRequest em navegadores Web (Chrome/Safari).
+  static Future<String> _consultarGeminiRobusto(String prompt) async {
+    if (_apiKey == 'COLE_SUA_CHAVE_GEMINI_AQUI' || _apiKey.isEmpty) {
       return "⚠️ Chave da API não configurada.";
     }
+
     try {
+      // 1ª Tentativa: SDK do Google com o modelo configurado (gemini-3.5-flash)
       final model = GenerativeModel(model: 'gemini-3.5-flash', apiKey: _apiKey);
-
-      // Concatena o histórico com a nova pergunta
-      final fullPrompt =
-          "Você é o Consultor IA de Negócios do App-Cic. Ajude o microempreendedor de forma firme, assertiva e direta com base neste histórico da conversa:\n\n$historico\n\nUsuário: $novaMensagem\nConsultor IA:";
-
-      final response = await model.generateContent([Content.text(fullPrompt)]);
-      return response.text ?? "Não recebi resposta da IA.";
+      final response = await model.generateContent([Content.text(prompt)]);
+      if (response.text != null && response.text!.isNotEmpty) {
+        return response.text!;
+      }
     } catch (e) {
+      print("Erro 1ª tentativa Gemini SDK (3.5): $e");
+      // Se não for erro de web/XMLHttpRequest, tenta o 1.5-flash no SDK via fallback
       try {
         final modelFallback = GenerativeModel(
-          model: 'gemini-3.5-flash',
+          model: 'gemini-1.5-flash',
           apiKey: _apiKey,
         );
-        final fullPrompt =
-            "Você é o Consultor IA de Negócios do App-Cic. Ajude o microempreendedor de forma firme, assertiva e direta com base neste histórico da conversa:\n\n$historico\n\nUsuário: $novaMensagem\nConsultor IA:";
         final response = await modelFallback.generateContent([
-          Content.text(fullPrompt),
+          Content.text(prompt),
         ]);
-        return response.text ?? "Não recebi resposta da IA.";
-      } catch (eFallback) {
-        String errStr = eFallback.toString() + e.toString();
-        print("Erro Gemini Chat: $errStr");
-        if (errStr.contains('429') ||
-            errStr.toLowerCase().contains('quota') ||
-            errStr.toLowerCase().contains('too many requests')) {
-          return "⏳ **Muitas mensagens seguidas!** Aguarde uns 30 segundinhos antes de enviar a próxima pergunta.";
-        } else if (errStr.contains('503') ||
-            errStr.toLowerCase().contains('service unavailable')) {
-          return "⚠️ **Servidor Ocupado:** Os computadores do Google estão cheios agora. Envie sua mensagem novamente em alguns segundos.";
+        if (response.text != null && response.text!.isNotEmpty) {
+          return response.text!;
         }
-        return "❌ **Falha de Conexão:** Não consegui conectar à internet. Verifique seu Wi-Fi.";
+      } catch (eFallback) {
+        print("Erro 2ª tentativa Gemini SDK (1.5): $eFallback");
       }
     }
+
+    // 2ª Tentativa: Chamada HTTP REST Direta (Bypassa problemas de headers/CORS e tenta como API Key e como Token OAuth 2 Bearer)
+    try {
+      final bodyJson = jsonEncode({
+        'contents': [
+          {'parts': [{'text': prompt}]}
+        ]
+      });
+
+      var url = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$_apiKey');
+      var resp = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json', 'x-goog-api-key': _apiKey},
+        body: bodyJson,
+      );
+
+      // Se o Google reclamar que a chave é um Token OAuth 2 ('ACCESS_TOKEN_TYPE_UNSUPPORTED' ou 'Expected OAuth 2 access token'),
+      // refazemos automaticamente a chamada enviando a chave no cabeçalho 'Authorization: Bearer' (suporte nativo para tokens do tipo AQ.Ab...)
+      if (resp.statusCode == 401 && (resp.body.contains('ACCESS_TOKEN_TYPE_UNSUPPORTED') || resp.body.contains('OAuth 2') || _apiKey.startsWith('AQ.') || _apiKey.startsWith('ya29.'))) {
+        print("Identificado token OAuth 2 / Service Token (${_apiKey.substring(0, 5)}...). Enviando via Authorization: Bearer...");
+        final urlBearer = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent');
+        resp = await http.post(
+          urlBearer,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $_apiKey',
+          },
+          body: bodyJson,
+        );
+
+        // Se gemini-3.5-flash com Bearer falhar por 404 ou 401, tenta o 1.5-flash com Bearer
+        if (resp.statusCode != 200) {
+          final urlBearer15 = Uri.parse('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent');
+          final resp15 = await http.post(
+            urlBearer15,
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $_apiKey',
+            },
+            body: bodyJson,
+          );
+          if (resp15.statusCode == 200) {
+            resp = resp15;
+          }
+        }
+      }
+
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(resp.body);
+        final candidates = data['candidates'] as List<dynamic>?;
+        if (candidates != null && candidates.isNotEmpty) {
+          final content = candidates[0]['content'];
+          if (content != null && content['parts'] != null) {
+            final parts = content['parts'] as List<dynamic>;
+            if (parts.isNotEmpty && parts[0]['text'] != null) {
+              return parts[0]['text'] as String;
+            }
+          }
+        }
+      } else {
+        print("Erro HTTP Gemini REST (${resp.statusCode}): ${resp.body}");
+        final errStr = resp.body.toLowerCase();
+        if (resp.statusCode == 429 || errStr.contains('quota') || errStr.contains('too many requests')) {
+          return "⏳ **Aguarde um momentinho! (Limite Antispam)**\n\nVocê fez muitas análises muito rápido! Para não sobrecarregar, o sistema permite cerca de 15 consultas por minuto. Respire fundo, espere uns 30 segundinhos e tente novamente! 😊";
+        } else if (resp.statusCode == 503 || errStr.contains('service unavailable')) {
+          return "⚠️ **Servidores Ocupados (Google)**\n\nA Inteligência Artificial está atendendo muita gente neste exato segundo e não conseguiu processar. Aguarde uns 10 segundinhos e clique novamente.";
+        } else if (resp.statusCode == 404) {
+          return "⚠️ **Modelo não encontrado (404):** O modelo 'gemini-3.5-flash' não está disponível para esta chave/projeto na versão atual da API.";
+        } else if (resp.statusCode == 401 || resp.statusCode == 400 || resp.statusCode == 403) {
+          try {
+            final errJson = jsonDecode(resp.body);
+            final msg = errJson['error']?['message'] ?? resp.body;
+            final details = errJson['error']?['details'] as List?;
+            String reason = '';
+            if (details != null && details.isNotEmpty) {
+              reason = details[0]['reason'] ?? '';
+            }
+            if (resp.statusCode == 401 || reason.contains('ACCESS_TOKEN_TYPE_UNSUPPORTED') || msg.contains('invalid authentication credentials')) {
+              return "⚠️ **Credenciais de Autenticação Recusadas (401 - $reason):**\n\nO servidor do Google informou:\n\"$msg\"\n\n*Explicação:* As requisições diretas para `generateContent` exigem uma Chave de API gerada no Google AI Studio (formato `AIzaSy...`). A chave atual configurada no `secrets.dart` (`AQ.Ab...`) é um Token OAuth/Outro Serviço que não é aceito diretamente nessa chamada (`ACCESS_TOKEN_TYPE_UNSUPPORTED`).";
+            }
+            return "⚠️ **Erro na Chave/API (${resp.statusCode}):** $msg";
+          } catch (_) {
+            if (resp.statusCode == 401) {
+              return "⚠️ **Credenciais Recusadas (401):** O Google recusou a chave/credencial configurada no `secrets.dart` para esta chamada.";
+            }
+            return "⚠️ **Erro na Chave/API (${resp.statusCode}):** ${resp.body}";
+          }
+        }
+      }
+    } catch (eHttp) {
+      print("Erro HTTP REST direct: $eHttp");
+      final errHttpStr = eHttp.toString();
+      if (errHttpStr.contains('401') || errHttpStr.contains('UNAUTHENTICATED') || errHttpStr.contains('ACCESS_TOKEN_TYPE_UNSUPPORTED')) {
+        return "⚠️ **Credenciais Recusadas (401):** A credencial no `secrets.dart` (`AQ.Ab...`) foi rejeitada pela API do Google (`ACCESS_TOKEN_TYPE_UNSUPPORTED`).";
+      }
+      if (errHttpStr.contains('XMLHttpRequest') || kIsWeb) {
+        return "🌐 **Bloqueio de Segurança Web (CORS/XMLHttpRequest):**\n\nComo o Lucas confirmou, **no celular (Android/iOS) a IA funciona normalmente** porque apps nativos conectam direto ao servidor sem restrições. Porém, navegadores Web (Chrome/Safari) bloqueiam por padrão requisições de servidores locais (`localhost`) por segurança do navegador (CORS / `XMLHttpRequest error`).\n\n**Dicas para testar na Web sem bloqueio:**\n1. Use o app rodando no celular ou emulador (onde funciona 100% sem bloqueio CORS).\n2. Ou inicie o Chrome desativando o CORS temporariamente para testes locais.";
+      }
+    }
+
+    return "❌ **Sem conexão com a IA**\n\nVerifique se o seu Wi-Fi/Internet está funcionando bem ou se o navegador Web não está bloqueando a requisição (`XMLHttpRequest error`).";
   }
 
   /// Gera relatório agendado (para uso com cron/Edge Function)

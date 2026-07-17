@@ -17,7 +17,7 @@ class TelaVendedor extends StatefulWidget {
 }
 
 class _CustoEntry {
-  int? id;
+  String? id; // UUID no Supabase (era int?)
   final TextEditingController nomeController;
   final TextEditingController valorController;
 
@@ -27,6 +27,7 @@ class _CustoEntry {
     required this.valorController,
   });
 }
+
 
 class _TelaVendedorState extends State<TelaVendedor> {
   List<_CustoEntry> custoEntries = [];

@@ -1,5 +1,5 @@
 class CustoOperacional {
-  final int? id;
+  final String? id; // UUID no Supabase (era int? — corrigido)
   final String nome;
   final double valor;
 
@@ -12,8 +12,8 @@ class CustoOperacional {
       };
 
   factory CustoOperacional.fromJson(Map<String, dynamic> json) => CustoOperacional(
-        id: json['id'],
-        nome: json['nome'],
-        valor: (json['valor'] as num).toDouble(),
+        id: json['id']?.toString(), // Supabase retorna UUID como String
+        nome: json['nome'] as String? ?? '',
+        valor: (json['valor'] as num?)?.toDouble() ?? 0.0,
       );
-}
+}

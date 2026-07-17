@@ -26,7 +26,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
   bool _alertaMargem = false; // Controle do Limitador Anti-Falência
 
   final MobileScannerController scannerController = MobileScannerController(
-    formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8],
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.upcA, BarcodeFormat.upcE, BarcodeFormat.code39, BarcodeFormat.code93, BarcodeFormat.codabar, BarcodeFormat.itf, BarcodeFormat.dataMatrix],
   );
 
   final TextEditingController codigoManualController = TextEditingController();
@@ -379,8 +380,10 @@ class _LeitorScreenState extends State<LeitorScreen> {
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 if (kIsWeb)
                   TextButton.icon(
@@ -394,7 +397,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                       );
                     },
                     icon: const Icon(Icons.videocam, size: 16, color: Colors.blue),
-                    label: const Text("Ativar Câmera Web", style: TextStyle(color: Colors.blue)),
+                    label: const Text("Câmera Web", style: TextStyle(color: Colors.blue)),
                   )
                 else
                   IconButton(
@@ -415,7 +418,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   onPressed: _limpar,
                   icon: const Icon(Icons.refresh, size: 16, color: Colors.red),
                   label: const Text(
-                    "Limpar Câmera",
+                    "Limpar",
                     style: TextStyle(color: Colors.red),
                   ),
                 ),
@@ -442,7 +445,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    initialValue: tipoProdutoSelecionado,
+                    value: tipoProdutoSelecionado,
                     decoration: const InputDecoration(
                       labelText: 'Tipo de Produto',
                     ),

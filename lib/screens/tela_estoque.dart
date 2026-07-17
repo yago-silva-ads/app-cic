@@ -683,7 +683,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                    initialValue: tipoSelecionado,
+                    value: tipoSelecionado,
                     decoration: const InputDecoration(
                       labelText: 'Origem do Produto',
                     ),

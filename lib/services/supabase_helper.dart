@@ -56,9 +56,10 @@ class SupabaseHelper {
       'markup': p.markup,
       'valor_venda': p.valorVenda,
       'origem': p.origem,
-      'data_entrada': p.dataEntrada?.toIso8601String(),
-      'data_validade': p.dataValidade?.toIso8601String(),
+      'data_entrada': p.dataEntrada?.toIso8601String().split('T')[0],
+      'data_validade': p.dataValidade?.toIso8601String().split('T')[0],
       'vendidas': p.vendidas,
+
       'empresa_id': _empresaId, // 🔒 Multi-tenant
     }, onConflict: 'codigo');
   }
@@ -127,11 +128,13 @@ class SupabaseHelper {
 
     // 2. Apagar do banco os custos desta empresa que foram removidos pelo usuário na tela
     if (idsExistentes.isNotEmpty) {
+      // UUIDs precisam de aspas no filtro not.in do PostgREST
+      final idsFormatados = idsExistentes.map((id) => '"$id"').join(',');
       await supabase
           .from('custos_operacionais')
           .delete()
           .eq('empresa_id', _empresaId)
-          .filter('id', 'not.in', '(${idsExistentes.join(',')})');
+          .filter('id', 'not.in', '($idsFormatados)');
     } else {
       // Se nenhum item da lista possui ID antigo, limpa todos os custos anteriores desta empresa
       await supabase.from('custos_operacionais').delete().eq('empresa_id', _empresaId);
@@ -142,7 +145,7 @@ class SupabaseHelper {
     final paraInserir = custos.where((c) => c.id == null).toList();
 
     if (paraAtualizar.isNotEmpty) {
-      final dataUpdate = paraAtualizar.map((c) => {
+      final dataUpdate = paraAtualizar.map((c) => <String, dynamic>{
         'id': c.id,
         'nome': c.nome,
         'valor': c.valor,
@@ -152,7 +155,7 @@ class SupabaseHelper {
     }
 
     if (paraInserir.isNotEmpty) {
-      final dataInsert = paraInserir.map((c) => {
+      final dataInsert = paraInserir.map((c) => <String, dynamic>{
         'nome': c.nome,
         'valor': c.valor,
         'empresa_id': _empresaId, // 🔒 Multi-tenant
@@ -160,6 +163,7 @@ class SupabaseHelper {
       await supabase.from('custos_operacionais').insert(dataInsert);
     }
   }
+
 
   // ==================== ALERTAS ====================
 
