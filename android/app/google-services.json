@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "346016803416",
+    "project_id": "app-cic-139dd",
+    "storage_bucket": "app-cic-139dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:346016803416:android:fe3d06ccc91eced144f82d",
+        "android_client_info": {
+          "package_name": "com.example.app_cic"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoGaPgny-GhD6h3ObVXL7Q2oTMvhc5nhI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,14 +1,21 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/produto.dart';
 import '../utils/moeda_formatter.dart';
-import '../services/db_helper.dart';
+import '../services/supabase_helper.dart';
 import '../services/api_service.dart';
 import 'tela_estoque.dart';
 import 'tela_dashboard.dart';
 import 'tela_vendedor.dart';
+<<<<<<< HEAD
+=======
+import 'tela_login.dart';
+import '../widgets/app_drawer.dart';
+>>>>>>> fix/ui-overflow-and-ia-bearer
 
 class LeitorScreen extends StatefulWidget {
   const LeitorScreen({super.key});
@@ -19,9 +26,14 @@ class LeitorScreen extends StatefulWidget {
 class _LeitorScreenState extends State<LeitorScreen> {
   String codigoLido = 'A aguardar leitura...';
   bool buscando = false;
+  bool _alertaMargem = false; // Controle do Limitador Anti-Falência
 
-  final MobileScannerController scannerController = MobileScannerController();
+  final MobileScannerController scannerController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.upcA, BarcodeFormat.upcE, BarcodeFormat.code39, BarcodeFormat.code93, BarcodeFormat.codabar, BarcodeFormat.itf, BarcodeFormat.dataMatrix],
+  );
 
+  final TextEditingController codigoManualController = TextEditingController();
   final TextEditingController nomeController = TextEditingController();
   final TextEditingController loteController = TextEditingController();
   final TextEditingController quantidadeController = TextEditingController();
@@ -32,9 +44,15 @@ class _LeitorScreenState extends State<LeitorScreen> {
   ); // Lucro de 100% por padrão
   final TextEditingController valorVendaController = TextEditingController();
 
+<<<<<<< HEAD
   String tipoProdutoSelecionado = 'revendido'; // Novo campo
+=======
+  String tipoProdutoSelecionado = 'Revendido';
+>>>>>>> fix/ui-overflow-and-ia-bearer
 
   List<Produto> bancoDeEstoque = [];
+
+  DateTime? _dataValidadeSelecionada;
 
   @override
   void initState() {
@@ -54,6 +72,9 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _calcularVendaEmTempoReal() {
     if (valorCompraController.text.isEmpty || markupController.text.isEmpty) {
       valorVendaController.clear();
+      setState(() {
+        _alertaMargem = false;
+      });
       return;
     }
 
@@ -68,18 +89,19 @@ class _LeitorScreenState extends State<LeitorScreen> {
     if (custo != null && markup != null) {
       double venda = custo * markup;
       valorVendaController.text = venda.toStringAsFixed(2).replaceAll('.', ',');
+
+      // Ativa o alerta se a margem for menor que 1.3
+      setState(() {
+        _alertaMargem = markup < 1.3;
+      });
     }
   }
 
   Future<void> _carregarDados() async {
-    final produtos = await DBHelper.instance.getEstoque();
+    final produtos = await SupabaseHelper.getEstoque();
     setState(() {
       bancoDeEstoque = produtos;
     });
-  }
-
-  void _atualizarTela() {
-    _carregarDados();
   }
 
   Future<void> validarGS1(String code) async {
@@ -118,6 +140,20 @@ class _LeitorScreenState extends State<LeitorScreen> {
     });
   }
 
+  Future<void> _selecionarDataValidade(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _dataValidadeSelecionada ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null && picked != _dataValidadeSelecionada) {
+      setState(() {
+        _dataValidadeSelecionada = picked;
+      });
+    }
+  }
+
   void salvar() async {
     if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...') {
       return;
@@ -137,16 +173,57 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorVendaController.text.replaceAll('.', '').replaceAll(',', '.'),
     );
 
-    if (qtd == null || valor == null || valorVenda == null || markup == null) {
+    if (qtd == null || valor == null || valorVenda == null || markup == null ||
+        qtd <= 0 || valor <= 0 || markup <= 0 || valorVenda <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Erro: Verifique a quantidade e os valores!"),
+            content: Text("Erro: Valores numéricos não podem estar vazios ou zerados!"),
             backgroundColor: Colors.red,
           ),
         );
       }
       return;
+    }
+
+    // Confirmação Dupla Anti-Falência
+    if (_alertaMargem) {
+      bool confirmar =
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text(
+                    "Preço Insuficiente!",
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
+              ),
+              content: const Text(
+                "A margem de lucro definida pode não ser suficiente para cobrir seus custos fixos. Deseja salvar este produto mesmo assim?",
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text("Cancelar"),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text(
+                    "Salvar mesmo assim",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+
+      if (!confirmar) return; // Cancela o salvamento se o usuário não confirmar
     }
 
     Produto novoProduto = Produto(
@@ -157,10 +234,17 @@ class _LeitorScreenState extends State<LeitorScreen> {
       valorCompra: valor,
       markup: markup,
       valorVenda: valorVenda,
+<<<<<<< HEAD
       tipoProduto: tipoProdutoSelecionado,
+=======
+      origem:
+          tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
+      dataValidade: _dataValidadeSelecionada,
+      dataEntrada: DateTime.now(), // <-- Registro automático do momento da entrada
+>>>>>>> fix/ui-overflow-and-ia-bearer
     );
 
-    await DBHelper.instance.insertProduto(novoProduto);
+    await SupabaseHelper.insertProduto(novoProduto);
 
     _carregarDados();
     _limpar();
@@ -178,13 +262,20 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _limpar() {
     setState(() {
       codigoLido = 'A aguardar leitura...';
+      codigoManualController.clear();
       nomeController.clear();
       loteController.clear();
       quantidadeController.clear();
       valorCompraController.clear();
       markupController.text = '2.0';
       valorVendaController.clear();
+<<<<<<< HEAD
       tipoProdutoSelecionado = 'revendido';
+=======
+      tipoProdutoSelecionado = 'Revendido';
+      _alertaMargem = false;
+      _dataValidadeSelecionada = null;
+>>>>>>> fix/ui-overflow-and-ia-bearer
     });
 
     scannerController.start();
@@ -193,6 +284,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+<<<<<<< HEAD
       appBar: AppBar(
         title: const Text('Leitor CIC 2026'),
       ),
@@ -268,34 +360,144 @@ class _LeitorScreenState extends State<LeitorScreen> {
           ],
         ),
       ),
+=======
+      appBar: AppBar(title: const Text('Leitor CIC 2026')),
+      drawer: const AppDrawer(),
+>>>>>>> fix/ui-overflow-and-ia-bearer
       body: SingleChildScrollView(
         child: Column(
           children: [
+            // Card de Entrada Direta / Leitor USB / Digitação Rápida (Essencial no Web & Mobile)
+            Container(
+              margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade300, width: 1.5),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_scanner, color: Color(0xFF0D47A1)),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: codigoManualController,
+                      decoration: const InputDecoration(
+                        hintText: 'Digite ou Bipe (Leitor USB) o EAN/GS1...',
+                        border: InputBorder.none,
+                        isDense: true,
+                        hintStyle: TextStyle(fontSize: 13),
+                      ),
+                      keyboardType: TextInputType.text,
+                      onSubmitted: (val) {
+                        final code = val.trim();
+                        if (code.isNotEmpty) {
+                          setState(() => codigoLido = code);
+                          scannerController.stop();
+                          validarGS1(code);
+                        }
+                      },
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final code = codigoManualController.text.trim();
+                      if (code.isNotEmpty) {
+                        setState(() => codigoLido = code);
+                        scannerController.stop();
+                        validarGS1(code);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0D47A1),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('Consultar', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+
+            // Aviso explicativo de câmera para Versão Web / PC
+            if (kIsWeb)
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 18, color: Colors.black87),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Dica Web/PC: Use o campo acima com Leitor USB ou digite o código se a câmera do navegador estiver bloqueada.",
+                        style: TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             SizedBox(
               height: 200,
               child: MobileScanner(
                 controller: scannerController,
                 onDetect: (cap) {
-                  final code = cap.barcodes.first.rawValue ?? "";
+                  if (cap.barcodes.isEmpty) return;
+                  final barcode = cap.barcodes.first;
+                  final code = barcode.rawValue ?? "";
 
                   if (codigoLido == 'A aguardar leitura...') {
                     setState(() => codigoLido = code);
                     scannerController.stop();
+                    
+                    if (barcode.format == BarcodeFormat.qrCode) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Formato QR Code reconhecido com sucesso"),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                    
                     validarGS1(code);
                   }
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
-                // 👇 BOTÃO DO FLASH ADICIONADO AQUI!
-                IconButton(
-                  onPressed: () => scannerController.toggleTorch(),
-                  icon: const Icon(Icons.flashlight_on, color: Colors.amber),
-                  tooltip: 'Ligar/Desligar Flash',
-                ),
-
+                if (kIsWeb)
+                  TextButton.icon(
+                    onPressed: () {
+                      scannerController.start();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Solicitando acesso à câmera ao navegador..."),
+                          backgroundColor: Colors.blue,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.videocam, size: 16, color: Colors.blue),
+                    label: const Text("Câmera Web", style: TextStyle(color: Colors.blue)),
+                  )
+                else
+                  IconButton(
+                    onPressed: () => scannerController.toggleTorch(),
+                    icon: const Icon(Icons.flashlight_on, color: Colors.amber),
+                    tooltip: 'Ligar/Desligar Flash',
+                  ),
                 TextButton.icon(
                   onPressed: () {
                     setState(() => codigoLido = "7891721201806");
@@ -309,13 +511,12 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   onPressed: _limpar,
                   icon: const Icon(Icons.refresh, size: 16, color: Colors.red),
                   label: const Text(
-                    "Limpar Câmera",
+                    "Limpar",
                     style: TextStyle(color: Colors.red),
                   ),
                 ),
               ],
             ),
-
             if (buscando) const LinearProgressIndicator(),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -337,18 +538,31 @@ class _LeitorScreenState extends State<LeitorScreen> {
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
+<<<<<<< HEAD
                     initialValue: tipoProdutoSelecionado,
+=======
+                    value: tipoProdutoSelecionado,
+>>>>>>> fix/ui-overflow-and-ia-bearer
                     decoration: const InputDecoration(
                       labelText: 'Tipo de Produto',
                     ),
                     items: const [
                       DropdownMenuItem(
+<<<<<<< HEAD
                         value: 'revendido',
                         child: Text('Revendido'),
                       ),
                       DropdownMenuItem(
                         value: 'produzido',
                         child: Text('Produzido'),
+=======
+                      value: 'Revendido',
+                        child: Text('Revendido'),
+                      ),
+                      DropdownMenuItem(
+                      value: 'Fabricado',
+                      child: Text('Fabricado'),
+>>>>>>> fix/ui-overflow-and-ia-bearer
                       ),
                     ],
                     onChanged: (value) {
@@ -358,13 +572,16 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     },
                   ),
                   const SizedBox(height: 10),
+<<<<<<< HEAD
 
+=======
+>>>>>>> fix/ui-overflow-and-ia-bearer
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: loteController,
-                          decoration: const InputDecoration(labelText: 'Lote'),
+                          decoration: const InputDecoration(labelText: 'Lote de Fabricação'),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -375,28 +592,85 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           inputFormatters: [
                             FilteringTextInputFormatter.digitsOnly,
                           ],
+<<<<<<< HEAD
                           decoration: const InputDecoration(labelText: 'Quantidade'),
+=======
+                          decoration: const InputDecoration(
+                            labelText: 'Quantidade em Estoque',
+                          ),
+>>>>>>> fix/ui-overflow-and-ia-bearer
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
 
-                  // Bloco Financeiro do Cintra
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () => _selecionarDataValidade(context),
+                          child: InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: 'Data de Validade',
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _dataValidadeSelecionada == null
+                                        ? 'Selecionar'
+                                        : '${_dataValidadeSelecionada!.day.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.month.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.year}',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: _dataValidadeSelecionada == null ? Theme.of(context).hintColor : null,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.calendar_month, size: 20),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InputDecorator(
+                          decoration: const InputDecoration(
+                            labelText: 'Data de Entrada',
+                          ),
+                          child: Text(
+                            'Hoje (Automático)',
+                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Bloco Financeiro do Cintra (Com Alerta de Margem)
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.1),
+                      color: _alertaMargem
+                          ? Colors.red.withOpacity(0.05)
+                          : Colors.blue.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(10),
+                      border: _alertaMargem
+                          ? Border.all(color: Colors.red, width: 1.5)
+                          : null,
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Precificação (Cintra)",
+                        Text(
+                          "Precificação",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.blue,
+                            color: _alertaMargem ? Colors.red : Colors.blue,
                           ),
                         ),
                         const SizedBox(height: 10),
@@ -408,7 +682,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                                 inputFormatters: [MoedaFormatter()],
                                 keyboardType: TextInputType.number,
                                 decoration: const InputDecoration(
-                                  labelText: 'Custo',
+                                  labelText: 'Custo Unitário (R\$)',
                                   prefixText: 'R\$ ',
                                 ),
                               ),
@@ -417,29 +691,59 @@ class _LeitorScreenState extends State<LeitorScreen> {
                             Expanded(
                               child: TextField(
                                 controller: markupController,
+<<<<<<< HEAD
                                 keyboardType: TextInputType.numberWithOptions(
                                   decimal: true,
                                 ),
                                 decoration: const InputDecoration(
                                   labelText: 'Margem (Ex: 2.0)',
+=======
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                decoration: InputDecoration(
+                                  labelText: 'Margem de Lucro (Markup)',
+                                  enabledBorder: _alertaMargem
+                                      ? const UnderlineInputBorder(
+                                          borderSide: BorderSide(
+                                            color: Colors.red,
+                                          ),
+                                        )
+                                      : null,
+>>>>>>> fix/ui-overflow-and-ia-bearer
                                 ),
                               ),
                             ),
                           ],
                         ),
+                        if (_alertaMargem)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              "⚠️ Risco de Prejuízo: Margem muito baixa para cobrir custos fixos!",
+                              style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: valorVendaController,
                           readOnly: true,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            color: Colors.green,
+                            color: _alertaMargem ? Colors.red : Colors.green,
                           ),
-                          decoration: const InputDecoration(
-                            labelText: 'Sugestão de Venda',
+                          decoration: InputDecoration(
+                            labelText: 'Preço de Venda Sugerido (R\$)',
                             prefixText: 'R\$ ',
                             filled: true,
-                            fillColor: Colors.white,
+                            fillColor: _alertaMargem
+                                ? Colors.red.shade50
+                                : Colors.white,
                           ),
                         ),
                       ],
@@ -451,8 +755,14 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     onPressed: salvar,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
+                      backgroundColor: _alertaMargem ? Colors.red : null,
+                      foregroundColor: _alertaMargem ? Colors.white : null,
                     ),
-                    child: const Text("Salvar no Banco de Dados"),
+                    child: Text(
+                      _alertaMargem
+                          ? "ATENÇÃO: Salvar com Risco"
+                          : "Salvar no Banco de Dados",
+                    ),
                   ),
                 ],
               ),

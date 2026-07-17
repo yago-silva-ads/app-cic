@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
+<<<<<<< HEAD
 import '../models/custo_operacional.dart';
 import '../services/db_helper.dart';
+=======
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/custo_operacional.dart';
+import '../services/supabase_helper.dart';
+>>>>>>> fix/ui-overflow-and-ia-bearer
 import '../utils/moeda_formatter.dart';
 import 'leitor_screen.dart';
 import 'tela_dashboard.dart';
 import 'tela_estoque.dart';
+<<<<<<< HEAD
+=======
+import 'tela_login.dart';
+import '../widgets/app_drawer.dart';
+>>>>>>> fix/ui-overflow-and-ia-bearer
 
 class TelaVendedor extends StatefulWidget {
   const TelaVendedor({super.key});
@@ -14,7 +25,11 @@ class TelaVendedor extends StatefulWidget {
 }
 
 class _CustoEntry {
+<<<<<<< HEAD
   int? id;
+=======
+  String? id; // UUID no Supabase (era int?)
+>>>>>>> fix/ui-overflow-and-ia-bearer
   final TextEditingController nomeController;
   final TextEditingController valorController;
 
@@ -25,6 +40,10 @@ class _CustoEntry {
   });
 }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> fix/ui-overflow-and-ia-bearer
 class _TelaVendedorState extends State<TelaVendedor> {
   List<_CustoEntry> custoEntries = [];
   bool _carregando = true;
@@ -36,6 +55,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
   }
 
   Future<void> _carregarCustos() async {
+<<<<<<< HEAD
     final custos = await DBHelper.instance.getCustosOperacionais();
     setState(() {
       if (custos.isEmpty) {
@@ -60,6 +80,36 @@ class _TelaVendedorState extends State<TelaVendedor> {
       }
       _carregando = false;
     });
+=======
+    try {
+      final custos = await SupabaseHelper.getCustosOperacionais();
+      setState(() {
+        if (custos.isEmpty) {
+          custoEntries = [
+            _CustoEntry(
+              nomeController: TextEditingController(),
+              valorController: TextEditingController(),
+            ),
+          ];
+        } else {
+          custoEntries = custos
+              .map(
+                (custo) => _CustoEntry(
+                  id: custo.id,
+                  nomeController: TextEditingController(text: custo.nome),
+                  valorController: TextEditingController(
+                    text: custo.valor.toStringAsFixed(2).replaceAll('.', ','),
+                  ),
+                ),
+              )
+              .toList();
+        }
+        _carregando = false;
+      });
+    } catch (e) {
+      setState(() => _carregando = false);
+    }
+>>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   void _adicionarCusto() {
@@ -96,6 +146,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
   }
 
   Future<void> _salvarCustos() async {
+<<<<<<< HEAD
     final listaSalva = <CustoOperacional>[];
     for (var entry in custoEntries) {
       final nome = entry.nomeController.text.trim();
@@ -126,6 +177,51 @@ class _TelaVendedorState extends State<TelaVendedor> {
       );
     }
     await _carregarCustos();
+=======
+    try {
+      final listaSalva = <CustoOperacional>[];
+      for (var entry in custoEntries) {
+        final nome = entry.nomeController.text.trim();
+        final valor = double.tryParse(
+          entry.valorController.text.replaceAll('.', '').replaceAll(',', '.'),
+        );
+
+        if (nome.isEmpty && (entry.valorController.text.trim().isEmpty)) {
+          continue;
+        }
+
+        listaSalva.add(
+          CustoOperacional(
+            id: entry.id,
+            nome: nome.isEmpty ? 'Custo Operacional' : nome,
+            valor: valor ?? 0,
+          ),
+        );
+      }
+
+      await SupabaseHelper.replaceCustosOperacionais(listaSalva);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Custos operacionais salvos com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+      await _carregarCustos();
+    } catch (e, stack) {
+      print("Erro ao salvar custos: $e\n$stack");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro ao salvar os custos operacionais: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+>>>>>>> fix/ui-overflow-and-ia-bearer
   }
 
   @override
@@ -145,6 +241,7 @@ class _TelaVendedorState extends State<TelaVendedor> {
         backgroundColor: Colors.blue.shade800,
         foregroundColor: Colors.white,
       ),
+<<<<<<< HEAD
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -214,6 +311,9 @@ class _TelaVendedorState extends State<TelaVendedor> {
           ],
         ),
       ),
+=======
+      drawer: const AppDrawer(),
+>>>>>>> fix/ui-overflow-and-ia-bearer
       body: _carregando
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

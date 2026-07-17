@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estratégia Arquitetural e Operacional do SaaS App-CIC</title>
+    <!-- GitHub Markdown CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.5.1/github-markdown.min.css">
+    <!-- Mermaid JS -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.1.0/dist/mermaid.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #f6f8fa;
+            margin: 0;
+            padding: 40px 20px;
+            color: #24292f;
+        }
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 45px;
+            background-color: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .markdown-body h1, .markdown-body h2 {
+            border-bottom: 2px solid #eaecef;
+            padding-bottom: 0.3em;
+        }
+        .mermaid {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e1e4e8;
+            margin: 20px 0;
+            display: flex;
+            justify-content: center;
+        }
+        .print-btn-container {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .print-btn {
+            background-color: #0969da;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            transition: background 0.2s;
+        }
+        .print-btn:hover {
+            background-color: #0550ae;
+        }
+        /* Estilos de Impressão e PDF */
+        @media print {
+            body {
+                background-color: #ffffff;
+                padding: 0;
+            }
+            .markdown-body {
+                border: none;
+                box-shadow: none;
+                padding: 0;
+                max-width: 100%;
+            }
+            .print-btn-container {
+                display: none !important;
+            }
+            .mermaid {
+                border: none;
+                background-color: transparent;
+            }
+            @page {
+                margin: 2cm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="print-btn-container">
+        <button class="print-btn" onclick="window.print()">🖨️ Gerar / Salvar como PDF</button>
+        <p style="margin-top: 10px; font-size: 14px; color: #57606a;">
+            Dica: Ao clicar, escolha o destino <strong>"Salvar como PDF"</strong> no seu navegador.
+        </p>
+    </div>
+
+    <article class="markdown-body">
+        <h1>🏢 Estratégia Arquitetural e Operacional do SaaS App-CIC</h1>
+        <p><strong>Documentação Técnica para Banca de Avaliação e Escala de Produção (Go-to-Market)</strong></p>
+        <hr>
+
+        <h2>1. 🔐 Estratégia de Autenticação e Disparo de E-mails (SMTP)</h2>
+        <h3>O Problema (Gargalo de SMTP Gratuito)</h3>
+        <p>O Supabase possui um servidor SMTP interno padrão para envio de e-mails transacionais (confirmação de conta, redefinição de senha). Para evitar abusos e SPAM na rede global, esse servidor possui um <em>rate limit</em> agressivo (aproximadamente 3 a 4 e-mails por hora). Isso limita testes de estresse em ambiente de desenvolvimento e impede a escala inicial no lançamento.</p>
+        
+        <p><strong>Decisão Arquitetural:</strong> A plataforma <strong>Supabase continuará sendo o nosso backend principal</strong> (PostgreSQL + Auth + Storage), pois oferece uma infraestrutura robusta, escalável e nativamente compatível com Row Level Security (RLS). O gargalo de comunicação será solucionado estrategicamente dividindo o ciclo de vida do software em três fases:</p>
+
+        <div class="mermaid">
+        graph TD
+            A["Usuário clica em Criar Conta"] --> B{"Fase do Projeto"}
+            B -->|Fase 1: MVP / Banca| C["Confirm Email Desativado"]
+            C --> D["Acesso Instantâneo / Zero Fricção"]
+            B -->|Fase 2: Escala / GTM| E["Custom SMTP: Resend / SendGrid"]
+            E --> F["E-mail Transacional Entregue em menos de 1s"]
+            B -->|Fase 3: Expansão| G["OAuth: Google / Apple Sign-in"]
+            G --> H["Identidade Validada Nativamente"]
+        </div>
+
+        <h3>Fase 1: Validação, Testes e Apresentação (MVP e Banca)</h3>
+        <p>Para demonstrações ao vivo (bancas avaliadoras e testes de validação interna), a fricção de entrada deve ser <strong>zero</strong>. O fluxo não pode depender de servidores de e-mail externos nem de verificação manual de caixas de entrada/spam durante o pitch.</p>
+        <ul>
+            <li><strong>Ação:</strong> Desativar a opção <code>Confirm email</code> no painel do Supabase (<code>Authentication</code> → <code>Providers</code> → <code>Email</code>).</li>
+            <li><strong>Resultado (<code>One-Click Onboarding</code>):</strong> Ao clicar em "Criar Conta", o usuário (mesmo com e-mails de teste como <code>lk@gmail.com</code> ou <code>rupestre@gmail.com</code>) é imediatamente autenticado no sistema. O JWT do usuário é emitido, a variável de tenant (<code>empresa_id = auth.uid()</code>) é vinculada e ele acessa diretamente o <strong>Dashboard Inteligente</strong>. Testes de isolamento multi-tenant são realizados e validados em segundos.</li>
+        </ul>
+
+        <h3>Fase 2: Produção e Escala (Go-to-Market)</h3>
+        <p>Quando o aplicativo for liberado para lojistas e empreendedores reais, a verificação de e-mail é reativada para garantir autenticidade, segurança contra <em>bots</em> e recuperação de senha. Para contornar o limite de envio do Supabase, conectaremos um provedor <strong>Custom SMTP</strong> profissional de terceiros diretamente no painel:</p>
+        <ul>
+            <li><strong>Resend:</strong> Provedor otimizado para desenvolvedores com limite gratuito de <strong>3.000 e-mails/mês</strong> (100 por dia) e entrega em milissegundos.</li>
+            <li><strong>SendGrid / Brevo:</strong> Alternativas corporativas consolidadas, oferecendo até <strong>300 e-mails/dia</strong> no plano gratuito.</li>
+            <li><strong>Fluxo Técnico:</strong> O aplicativo solicita o envio ao Supabase Auth → O Supabase repassa o <em>payload</em> assinado para a API do Resend → O Resend entrega o e-mail transacional com alta reputação de IP na caixa de entrada do lojista.</li>
+        </ul>
+
+        <h3>Fase 3: Autenticação Social (Frictionless OAuth)</h3>
+        <ul>
+            <li><strong>Google Sign-in / Apple Sign-in:</strong> Implementação de botões nativos OAuth no aplicativo móvel. Como os provedores sociais (Google/Apple) já realizam a verificação de identidade e e-mail na origem, o Supabase autentica o usuário sem necessidade de envio de links ou códigos transacionais, eliminando custos operacionais de SMTP e elevando a taxa de conversão no cadastro.</li>
+        </ul>
+
+        <hr>
+
+        <h2>2. 🛡️ Isolamento Multi-Tenant via Row Level Security (RLS)</h2>
+        <h3>Segurança Direta no Motor do Banco (PostgreSQL Engine)</h3>
+        <p>Diferente de sistemas tradicionais que filtram dados na camada de aplicação (<code>WHERE empresa_id = ...</code> no código, suscetível a erros humanos e falhas de segurança), o App-CIC delega a segurança arquitetural para o <strong>PostgreSQL Row Level Security (RLS)</strong> diretamente no kernel do banco de dados.</p>
+
+        <div class="mermaid">
+        sequenceDiagram
+            participant App as App Flutter (Tenant A)
+            participant Auth as Supabase Auth (JWT)
+            participant DB as PostgreSQL (RLS Engine)
+            
+            App->>Auth: Login e Token JWT (sub = auth.uid)
+            App->>DB: SELECT * FROM produtos
+            Note over DB: Motor PostgreSQL avalia Política RLS: USING (empresa_id = auth.uid)
+            DB-->>App: Retorna APENAS produtos do Tenant A
+        </div>
+
+        <h3>O Mito: "RLS depende da confirmação de e-mail?"</h3>
+        <p><strong>Não.</strong> A segurança por RLS no PostgreSQL (<code>auth.uid()</code>) é <strong>100% independente do status de verificação do e-mail</strong> (<code>email_confirmed_at</code>).</p>
+        <ul>
+            <li><strong>Como funciona o <code>auth.uid()</code>:</strong> Sempre que um usuário faz login ou cria uma conta (seja conta verificada, conta com verificação desativada na Fase 1, ou conta Google OAuth), o Supabase gera um Token JWT que carrega a <em>claim</em> <code>sub</code> contendo o UUID único daquela conta (<code>ex: 1111-1111-1111-1111</code>).</li>
+            <li>O motor do banco de dados intercepta toda query (<code>SELECT</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code>) e compara rigorosamente <code>empresa_id = auth.uid()</code>.</li>
+        </ul>
+
+        <h3>Diagnóstico de Acesso Indevido (Por que contas diferentes viram os mesmos dados no teste?)</h3>
+        <p>Se duas contas de teste (<code>lk@gmail.com</code> e <code>rupestre@gmail.com</code>) enxergaram os mesmos produtos na tela de estoque, <strong>isso indica que o script SQL das Políticas RLS ainda não foi executado (ou o RLS está desabilitado) na tabela <code>produtos</code> no Supabase SQL Editor</strong>.</p>
+        <ul>
+            <li>Sem o RLS ativo (<code>ALTER TABLE produtos ENABLE ROW LEVEL SECURITY;</code>), ou caso exista uma política permissiva antiga (como <code>"Enable read access for all users"</code> com <code>USING (true)</code>), o banco de dados opera em modo <em>público/legado</em> e retorna todos os registros da tabela para qualquer usuário.</li>
+            <li><strong>Diagnóstico e Execução:</strong> Para ativar a blindagem definitiva, executa-se o script <code>supabase/rls_migration.sql</code> no SQL Editor do Supabase. Imediatamente após a execução, o isolamento multi-tenant se torna inviolável e nenhum usuário acessa dados de outro tenant.</li>
+        </ul>
+
+        <h3>2.1 ⚙️ Sistema de QA Automatizado e Auto-Regulável (Triggers & Stored Procedures)</h3>
+        <p>Para eliminar a necessidade de auditorias e varreduras manuais no futuro, e garantir o <strong>padrão ouro de Qualidade (QA)</strong> na arquitetura de dados, o App-CIC implementa mecanismos ativos no kernel do PostgreSQL através de <strong>Triggers</strong> e <strong>Stored Procedures</strong> (<code>supabase/qa_triggers_e_procedures.sql</code>):</p>
+
+        <div class="mermaid">
+        sequenceDiagram
+            participant App as App Flutter
+            participant DB as PostgreSQL (BEFORE INSERT Trigger)
+            participant Auth as Supabase Auth JWT
+            
+            App->>DB: INSERT INTO produtos sem empresa_id
+            Note over DB: Trigger fn_qa_injetar_e_validar_tenant é acionado
+            DB->>Auth: Solicita auth.uid da sessão
+            Note over DB: Trigger injeta NEW.empresa_id = auth.uid e valida Anti-Spoofing
+            DB-->>App: Registro salvo com sucesso e blindado!
+        </div>
+
+        <ol>
+            <li><strong>Trigger de Injeção e Validação de Tenant (<code>fn_qa_injetar_e_validar_tenant</code>):</strong>
+                <ul>
+                    <li>Acoplado nas tabelas <code>produtos</code>, <code>historico_vendas</code> e <code>custos_operacionais</code> no evento <code>BEFORE INSERT OR UPDATE</code>.</li>
+                    <li><strong>Injeção Automática:</strong> Se qualquer módulo do app tentar inserir um registro sem especificar a coluna <code>empresa_id</code>, o Trigger intercepta a operação e injeta automaticamente o ID do usuário logado (<code>auth.uid()</code>).</li>
+                    <li><strong>Proteção Anti-Spoofing:</strong> Se houver uma tentativa de manipular o payload enviando um <code>empresa_id</code> de terceiros, o Trigger corrige o valor instantaneamente para o ID real do usuário autenticado ou bloqueia a transação caso a sessão seja anônima.</li>
+                </ul>
+            </li>
+            <li><strong>Stored Procedure de Auditoria e Limpeza (<code>sp_qa_varredura_e_limpeza_legado</code>):</strong>
+                <ul>
+                    <li>Função encapsulada no banco que audita a integridade referencial e remove dados órfãos em ordem de dependência (tabelas filhas → tabelas pai), impedindo violações de chave estrangeira (<code>Foreign Key Constraint</code>).</li>
+                    <li>Pode ser invocada a qualquer momento com um único comando (<code>SELECT sp_qa_varredura_e_limpeza_legado();</code>) ou agendada para execução noturna via cron jobs do banco de dados (<code>pg_cron</code>), gerando um relatório JSON de conformidade em tempo real.</li>
+                </ul>
+            </li>
+        </ol>
+
+        <hr>
+
+        <h2>3. 🤖 Inteligência Artificial Preditiva e Analítica (Google Gemini & <code>IaService</code>)</h2>
+        <p>O grande diferencial do App-CIC é a integração nativa com o <strong>Google Gemini 3.1 Pro</strong> através do serviço <code>IaService</code>, transformando dados brutos e isolados de cada lojista em <strong>acessibilidade estratégica, relatórios gerenciais e tomada de decisão em tempo real</strong>.</p>
+
+        <div class="mermaid">
+        graph LR
+            subgraph Banco_Tenant ["Banco do Tenant (Isolado via RLS)"]
+                E["Estoque / Produtos"]
+                H["Histórico de Vendas"]
+                C["Custos Operacionais"]
+            end
+            
+            subgraph Camada_IA ["Camada IA - Google Gemini 3.1 Pro"]
+                E & H & C -->|Payload Estruturado| S["IaService.analisarEstoque"]
+                S -->|Engenharia de Prompt + Métricas| G["Modelo Gemini API"]
+            end
+            
+            subgraph Dashboard ["Dashboard & Acessibilidade"]
+                G --> R1["📊 Curva ABC e Lucratividade"]
+                G --> R2["⚠️ Alerta de Prejuízo / Margem"]
+                G --> R3["💡 Consultor IA Pessoal"]
+            end
+        </div>
+
+        <h3>3.1 Acessibilidade Analítica Direta ao Banco de Dados (<code>IaService</code>)</h3>
+        <p>A IA não atua apenas com perguntas genéricas; ela possui <strong>acesso de leitura estruturada aos dados do tenant autenticado</strong>. Quando o lojista abre o <code>Dashboard & IA</code>, o sistema coleta em milissegundos os dados blindados pelo RLS:</p>
+        <ol>
+            <li><strong>Estoque Atual (<code>Produto</code>)</strong>: Código, Nome, Lote, Quantidade em Estoque, Valor de Compra, Markup e Valor de Venda.</li>
+            <li><strong>Histórico de Vendas (<code>historico_vendas</code>)</strong>: Itens vendidos, quantidades, preços praticados e datas exatas de movimentação.</li>
+            <li><strong>Custos Operacionais (<code>CustoOperacional</code>)</strong>: Despesas fixas mensais da empresa (aluguel, luz, folha de pagamento, internet).</li>
+        </ol>
+
+        <h3>3.2 Motores de Análise e Funcionalidades Preditivas</h3>
+        <p>A partir da correlação desses três pilares de dados, a IA do Google Gemini gera relatórios multidimensionais:</p>
+        <ul>
+            <li><strong>📊 Curva ABC e Classificação de Lucro:</strong> O aplicativo cruza a quantidade em estoque com o lucro projetado <code>(valorVenda - valorCompra) * quantidade</code> e cataloga os itens em Classe A (80% da lucratividade), Classe B e Classe C, orientando o lojista sobre quais produtos merecem reposição prioritária ou promoções para desova.</li>
+            <li><strong>⚠️ Alerta Crítico de Prejuízo e Sobrevivência Operacional:</strong> O <code>IaService</code> e o Dashboard calculam a soma de todos os custos operacionais da empresa contra o lucro bruto projetado do estoque. Se <code>Lucro Projetado < Custos Operacionais</code>, o app exibe um alerta preventivo em destaque, avisando ao empreendedor que a margem de lucro atual não cobre as despesas fixas do negócio antes mesmo do mês fechar.</li>
+            <li><strong>📈 Visão Preditiva de Fluxo de Caixa e Capital Parado:</strong> A inteligência artificial analisa a velocidade de giro (<code>vendidas</code>), identifica capital imobilizado em produtos encalhados e sugere ajustes dinâmicos de <em>Markup</em> para otimizar o fluxo de caixa.</li>
+            <li><strong>💬 Consultor IA Interativo (Acessibilidade em Linguagem Natural):</strong> O usuário pode interagir diretamente com a IA via chat/consultor, perguntando em português simples: <em>"Quais produtos devo comprar este mês?"</em> ou <em>"Como posso reduzir meu custo operacional em 10%?"</em>. A IA responde com base real nos números bancados pelo Supabase daquela micro ou pequena empresa.</li>
+        </ul>
+
+        <hr>
+
+        <h2>4. Conclusão: Prontidão para Apresentação e Escala</h2>
+        <p>Com essa arquitetura trifásica:</p>
+        <ol>
+            <li><strong>O Onboarding (Fase 1)</strong> garante <strong>testes instantâneos e sem fricção</strong> para a banca avaliadora.</li>
+            <li><strong>O Banco de Dados PostgreSQL + RLS</strong> garante <strong>blindagem de dados de nível bancário</strong>, onde nenhum tenant enxerga dados de outro.</li>
+            <li><strong>A Inteligência Artificial do Google Gemini (<code>IaService</code>)</strong> entrega uma experiência <strong>SaaS de alto valor agregado</strong>, democratizando análises financeiras complexas em insights acessíveis para o pequeno varejista.</li>
+        </ol>
+
+        <hr>
+
+        <h2>5. Roadmap: Painel Gerencial Web (SaaS Dashboard)</h2>
+        <h3>5.1 Arquitetura do Portal Web</h3>
+        <p>Para entregar uma experiência de análise de dados premium aos lojistas (Dashboards, KPIs e Predições), expandiremos o aplicativo mobile para um portal <strong>Flutter Web</strong>.</p>
+        <ul>
+            <li><strong>Vantagem:</strong> Reutiliza 100% da inteligência do Supabase e das regras de segurança (RLS) já criadas para o mobile.</li>
+            <li><strong>Segurança:</strong> Ao logar na Web, o banco de dados continua filtrando automaticamente os dados de cada loja baseando-se no <code>auth.uid()</code>. Nenhum lojista vê o faturamento do outro.</li>
+        </ul>
+
+        <h3>5.2 Bibliotecas Necessárias</h3>
+        <p>O código do portal web precisará de pacotes de visualização de dados de alta qualidade para substituir o Looker Studio:</p>
+        <ul>
+            <li><code>fl_chart</code>: Para gráficos de linhas (faturamento) e barras (produtos mais vendidos).</li>
+            <li><code>data_table_2</code>: Para tabelas de fluxo de caixa responsivas.</li>
+            <li><code>google_fonts</code>: Para tipografia moderna e design limpo.</li>
+        </ul>
+
+        <h3>5.3 Estrutura de Telas (Web)</h3>
+        <ul>
+            <li><strong>Login Web:</strong> Porta de entrada segura para gerentes/donos.</li>
+            <li><strong>Visão Geral (Dashboard):</strong> Cards de KPIs (Lucro, Vendas do Dia) e Gráfico de Faturamento Mensal.</li>
+            <li><strong>Inteligência (IA Preditiva):</strong> Integração com o <code>IaService</code> já existente para gerar relatórios preditivos diretos na tela do computador.</li>
+        </ul>
+    </article>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true, 
+            theme: 'default',
+            securityLevel: 'loose'
+        });
+    </script>
+</body>
+</html>
