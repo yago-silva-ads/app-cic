@@ -19,9 +19,9 @@ class IaService {
       return "📊 O seu estoque está vazio. Adicione produtos no PDV para gerar um diagnóstico financeiro.";
     }
 
-    // Proteção em tempo de execução: impede crash na tela do cliente
+    // Proteção em tempo de execução: orienta o deploy na Vercel ou local
     if (_apiKey == 'COLE_SUA_CHAVE_GEMINI_AQUI' || _apiKey.isEmpty) {
-      return "⚠️ Serviço de Inteligência Temporariamente Indisponível. Por favor, tente novamente mais tarde ou contate o suporte técnico.";
+      return "⚠️ **IA Desativada no Deploy da Vercel:**\\n\\nPara a IA funcionar na nuvem (onde o arquivo `secrets.dart` é invisível por segurança), vá nas configurações do seu site no Vercel:\\n1. Acesse **Settings -> Environment Variables** no painel da Vercel.\\n2. Adicione uma variável chamada **`GEMINI_API_KEY`** e cole sua chave (ou token `AQ.Ab...`).\\n3. Vá na aba **Deployments** e clique em **Redeploy**.\\n\\n*(Se estiver rodando no seu computador, certifique-se de que a chave está no `lib/secrets.dart`)*";
     }
 
     // Monta o texto fora do try/catch para que ambos os planos (A e B) possam enxergar
