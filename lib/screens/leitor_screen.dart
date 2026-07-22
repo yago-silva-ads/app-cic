@@ -24,6 +24,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   String codigoLido = 'A aguardar leitura...';
   bool buscando = false;
   bool _alertaMargem = false; // Controle do Limitador Anti-Falência
+  bool _salvando = false; // Estado de carregamento do salvamento
 
   final MobileScannerController scannerController = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
@@ -148,30 +149,56 @@ class _LeitorScreenState extends State<LeitorScreen> {
   }
 
   void salvar() async {
-    if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...') {
+    if (_salvando) return;
+
+    // 1. Obter código final de barras (Scanner ou Digitação Manual)
+    String codigoFinal = codigoLido;
+    if (codigoFinal == 'A aguardar leitura...' && codigoManualController.text.trim().isNotEmpty) {
+      codigoFinal = codigoManualController.text.trim();
+    }
+
+    if (codigoFinal == 'A aguardar leitura...' || codigoFinal.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Atenção: Por favor, bipe ou digite o código de barras antes de salvar!"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
       return;
     }
 
-    int? qtd = int.tryParse(quantidadeController.text);
-    String valorTexto = valorCompraController.text
-        .replaceAll('.', '')
-        .replaceAll(',', '.');
-    double? valor = double.tryParse(valorTexto);
+    // 2. Validação do Nome
+    if (nomeController.text.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Atenção: Por favor, preencha o Nome do Produto!"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
 
-    double? markup = double.tryParse(
-      markupController.text.replaceAll(',', '.'),
-    );
+    // 3. Conversão robusta de valores numéricos
+    double? parseDoubleLocal(String text) {
+      String limpo = text.replaceAll(RegExp(r'[^0-9,]'), '').replaceAll(',', '.');
+      return double.tryParse(limpo);
+    }
 
-    double? valorVenda = double.tryParse(
-      valorVendaController.text.replaceAll('.', '').replaceAll(',', '.'),
-    );
+    int? qtd = int.tryParse(quantidadeController.text.replaceAll(RegExp(r'[^0-9]'), ''));
+    double? valor = parseDoubleLocal(valorCompraController.text);
+    double? markup = parseDoubleLocal(markupController.text);
+    double? valorVenda = parseDoubleLocal(valorVendaController.text);
 
     if (qtd == null || valor == null || valorVenda == null || markup == null ||
         qtd <= 0 || valor <= 0 || markup <= 0 || valorVenda <= 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Erro: Valores numéricos não podem estar vazios ou zerados!"),
+            content: Text("Erro: Quantidade, Custo, Margem e Preço de Venda devem ter valores maiores que zero!"),
             backgroundColor: Colors.red,
           ),
         );
@@ -179,7 +206,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       return;
     }
 
-    // Confirmação Dupla Anti-Falência
+    // 4. Confirmação Dupla Anti-Falência
     if (_alertaMargem) {
       bool confirmar =
           await showDialog(
@@ -216,35 +243,59 @@ class _LeitorScreenState extends State<LeitorScreen> {
           ) ??
           false;
 
-      if (!confirmar) return; // Cancela o salvamento se o usuário não confirmar
+      if (!confirmar) return;
     }
 
-    Produto novoProduto = Produto(
-      codigo: codigoLido,
-      nome: nomeController.text,
-      lote: loteController.text,
-      quantidade: qtd,
-      valorCompra: valor,
-      markup: markup,
-      valorVenda: valorVenda,
-      origem:
-          tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
-      dataValidade: _dataValidadeSelecionada,
-      dataEntrada: DateTime.now(), // <-- Registro automático do momento da entrada
-    );
+    // 5. Tentativa de salvamento no Supabase
+    setState(() {
+      _salvando = true;
+    });
 
-    await SupabaseHelper.insertProduto(novoProduto);
-
-    _carregarDados();
-    _limpar();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Produto salvo com sucesso!"),
-          backgroundColor: Colors.green,
-        ),
+    try {
+      Produto novoProduto = Produto(
+        codigo: codigoFinal,
+        nome: nomeController.text.trim(),
+        lote: loteController.text.trim().isEmpty ? 'S/L' : loteController.text.trim(),
+        quantidade: qtd,
+        valorCompra: valor,
+        markup: markup,
+        valorVenda: valorVenda,
+        origem: tipoProdutoSelecionado,
+        dataValidade: _dataValidadeSelecionada,
+        dataEntrada: DateTime.now(),
       );
+
+      await SupabaseHelper.insertProduto(novoProduto);
+
+      await _carregarDados();
+      _limpar();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Produto salvo no banco de dados com sucesso!"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print("Erro ao salvar produto: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Falha ao salvar no banco de dados: ${e.toString()}"),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _salvando = false;
+        });
+      }
     }
   }
 
@@ -630,17 +681,26 @@ class _LeitorScreenState extends State<LeitorScreen> {
 
                   const SizedBox(height: 20),
                   ElevatedButton(
-                    onPressed: salvar,
+                    onPressed: _salvando ? null : salvar,
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size.fromHeight(50),
                       backgroundColor: _alertaMargem ? Colors.red : null,
                       foregroundColor: _alertaMargem ? Colors.white : null,
                     ),
-                    child: Text(
-                      _alertaMargem
-                          ? "ATENÇÃO: Salvar com Risco"
-                          : "Salvar no Banco de Dados",
-                    ),
+                    child: _salvando
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            _alertaMargem
+                                ? "ATENÇÃO: Salvar com Risco"
+                                : "Salvar no Banco de Dados",
+                          ),
                   ),
                 ],
               ),

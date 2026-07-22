@@ -8,12 +8,17 @@ class SupabaseHelper {
   static final supabase = Supabase.instance.client;
 
   /// 🔒 Retorna o ID do usuário logado (usado como empresa_id para multi-tenant)
-  static String get _empresaId => supabase.auth.currentUser!.id;
+  static String get _empresaId => supabase.auth.currentUser?.id ?? '';
 
   // Buscar todo o estoque da nuvem
   static Future<List<Produto>> getEstoque() async {
     try {
-      final response = await supabase.from('produtos').select().eq('empresa_id', _empresaId);
+      final empId = _empresaId;
+      var query = supabase.from('produtos').select();
+      if (empId.isNotEmpty) {
+        query = query.eq('empresa_id', empId);
+      }
+      final response = await query;
       print("Produtos encontrados: ${response.length}"); // DEBUG
 
       // Mapear o JSON do Supabase para a sua classe Produto
@@ -27,7 +32,6 @@ class SupabaseHelper {
               valorCompra: (json['valor_compra'] as num).toDouble(),
               markup: (json['markup'] as num).toDouble(),
               valorVenda: (json['valor_venda'] as num).toDouble(),
-              // AS TRÊS LINHAS NOVAS AQUI:
               origem: json['origem'] ?? 'Revendido',
               dataEntrada: json['data_entrada'] != null
                   ? DateTime.tryParse(json['data_entrada'])
@@ -45,23 +49,34 @@ class SupabaseHelper {
     }
   }
 
-  // Inserir ou Atualizar Produto (Upsert) — 🔒 injeta empresa_id automaticamente
+  // Inserir ou Atualizar Produto (Upsert)
   static Future<void> insertProduto(Produto p) async {
-    await supabase.from('produtos').upsert({
-      'codigo': p.codigo,
-      'nome': p.nome,
-      'lote': p.lote,
-      'quantidade': p.quantidade,
-      'valor_compra': p.valorCompra,
-      'markup': p.markup,
-      'valor_venda': p.valorVenda,
-      'origem': p.origem,
-      'data_entrada': p.dataEntrada?.toIso8601String().split('T')[0],
-      'data_validade': p.dataValidade?.toIso8601String().split('T')[0],
-      'vendidas': p.vendidas,
+    try {
+      final empId = _empresaId.isNotEmpty ? _empresaId : p.empresaId;
+      final data = <String, dynamic>{
+        'codigo': p.codigo,
+        'nome': p.nome,
+        'lote': p.lote,
+        'quantidade': p.quantidade,
+        'valor_compra': p.valorCompra,
+        'markup': p.markup,
+        'valor_venda': p.valorVenda,
+        'origem': p.origem,
+        'data_entrada': p.dataEntrada?.toIso8601String().split('T')[0],
+        'data_validade': p.dataValidade?.toIso8601String().split('T')[0],
+        'vendidas': p.vendidas,
+      };
 
-      'empresa_id': _empresaId, // 🔒 Multi-tenant
-    }, onConflict: 'codigo');
+      if (empId != null) {
+        data['empresa_id'] = empId;
+      }
+
+      await supabase.from('produtos').upsert(data, onConflict: 'codigo');
+      print("Produto inserido/atualizado com sucesso: ${p.nome}");
+    } catch (e) {
+      print("Erro no SupabaseHelper.insertProduto: $e");
+      rethrow;
+    }
   }
 
   // Registrar uma venda no histórico — 🔒 injeta empresa_id automaticamente
