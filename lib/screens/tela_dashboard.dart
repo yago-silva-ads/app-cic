@@ -613,7 +613,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Portal Web Looker Studio & IA",
+                        "Gráficos do Negócio",
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
