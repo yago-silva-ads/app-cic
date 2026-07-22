@@ -105,7 +105,7 @@ class AppDrawer extends StatelessWidget {
                 _buildMenuItem(
                   context: context,
                   icon: Icons.language,
-                  title: 'Portal Web & Looker Studio',
+                  title: 'Gráficos do Negócio',
                   color: Colors.teal.shade700,
                   onTap: () {
                     Navigator.pop(context);

@@ -52,7 +52,7 @@ class TelaTutorialWeb extends StatelessWidget {
       drawer: const AppDrawer(),
       backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('Portal Web Looker Studio & IA', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text('Gráficos do Negócio', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: const Color(0xFF1E1E1E),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
