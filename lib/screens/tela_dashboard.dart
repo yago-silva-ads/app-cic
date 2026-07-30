@@ -6,6 +6,7 @@ import '../models/produto.dart';
 import '../services/supabase_helper.dart';
 import '../services/ia_service.dart';
 import '../models/custo_operacional.dart';
+import '../models/despesa_variavel.dart';
 import 'leitor_screen.dart';
 import 'tela_estoque.dart';
 import 'tela_vendedor.dart';
@@ -25,10 +26,12 @@ class _TelaDashboardState extends State<TelaDashboard> {
   List<Produto> estoque = [];
   List<Map<String, dynamic>> historicoVendas = [];
   List<CustoOperacional> custosOperacionais = [];
+  List<DespesaVariavel> despesasVariaveis = [];
   bool _isAnalyzing = false;
   String? _analiseIA;
   bool _isLoading = true;
-  String _filtroPeriodo = 'Tudo'; // 'Hoje', '7 Dias', 'Mês', 'Tudo'
+  String _filtroPeriodo = 'Mês'; // 'Hoje', '7 Dias', 'Mês', 'Tudo' — Padrão: valor acumulado no mês
+  int _itensVisiveis = 10; // Paginação: mostra 10 itens por vez no detalhamento
 
   @override
   void initState() {
@@ -40,6 +43,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
     List<Produto> dados = [];
     List<Map<String, dynamic>> historico = [];
     List<CustoOperacional> custos = [];
+    List<DespesaVariavel> despesas = [];
 
     try {
       dados = await SupabaseHelper.getEstoque();
@@ -59,12 +63,19 @@ class _TelaDashboardState extends State<TelaDashboard> {
       print("Dashboard: Erro ao carregar custos: $e");
     }
 
+    try {
+      despesas = await SupabaseHelper.getDespesasVariaveis();
+    } catch (e) {
+      print("Dashboard: Erro ao carregar despesas variáveis: $e");
+    }
+
     if (!mounted) return; // Proteção: impede erro se o usuário fechar a tela durante o carregamento
 
     setState(() {
       estoque = dados;
       historicoVendas = historico;
       custosOperacionais = custos;
+      despesasVariaveis = despesas;
       _isLoading = false;
     });
   }
@@ -226,6 +237,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                         Navigator.pop(ctx);
                         setState(() {
                           _filtroPeriodo = mesLabel;
+                          _itensVisiveis = 10;
                         });
                       },
                       borderRadius: BorderRadius.circular(8),
@@ -376,14 +388,8 @@ class _TelaDashboardState extends State<TelaDashboard> {
                       }
                       Navigator.pop(ctx);
 
-                      final novoCusto = CustoOperacional(
-                        nome: nome,
-                        valor: valor,
-                      );
-                      final novosCustos = [...custosOperacionais, novoCusto];
-                      await SupabaseHelper.replaceCustosOperacionais(
-                        novosCustos,
-                      );
+                      // Salva como despesa variável (NÃO em custos operacionais fixos)
+                      await SupabaseHelper.insertDespesaVariavel(nome, valor);
                       _carregarDados();
 
                       if (context.mounted) {
@@ -422,14 +428,17 @@ class _TelaDashboardState extends State<TelaDashboard> {
   }
 
   Widget _buildAbaFluxoCaixa() {
+    DateTime? extrairDataLocal(dynamic raw) {
+      if (raw == null) return null;
+      return DateTime.tryParse(raw.toString())?.toLocal();
+    }
+
     // 1. Extrair meses distintos históricos dinamicamente
     final Set<String> mesesHistoricos = {};
     for (var v in historicoVendas) {
-      if (v['criado_em'] != null) {
-        final dt = DateTime.tryParse(v['criado_em'].toString());
-        if (dt != null) {
-          mesesHistoricos.add(_obterLabelMes(dt));
-        }
+      final dt = extrairDataLocal(v['criado_em'] ?? v['data_venda'] ?? v['created_at']);
+      if (dt != null) {
+        mesesHistoricos.add(_obterLabelMes(dt));
       }
     }
     final listaOpcoesPeriodo = [
@@ -448,11 +457,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
     final agora = DateTime.now();
 
     for (var v in historicoVendas) {
-      DateTime? dataVenda;
-      if (v['criado_em'] != null) {
-        dataVenda = DateTime.tryParse(v['criado_em'].toString());
-      }
-      dataVenda ??= agora;
+      DateTime dataVenda = extrairDataLocal(v['criado_em'] ?? v['data_venda'] ?? v['created_at']) ?? agora;
 
       bool incluir = true;
       if (_filtroPeriodo == 'Hoje') {
@@ -461,7 +466,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
             dataVenda.month == agora.month &&
             dataVenda.day == agora.day;
       } else if (_filtroPeriodo == '7 Dias') {
-        incluir = agora.difference(dataVenda).inDays <= 7;
+        incluir = agora.difference(dataVenda).inDays.abs() <= 7;
       } else if (_filtroPeriodo == 'Mês') {
         incluir =
             dataVenda.year == agora.year && dataVenda.month == agora.month;
@@ -475,108 +480,256 @@ class _TelaDashboardState extends State<TelaDashboard> {
       }
     }
 
-    if (historicoFiltrado.isEmpty && _filtroPeriodo == 'Tudo') {
+    if (historicoFiltrado.isEmpty && despesasVariaveis.isEmpty && _filtroPeriodo == 'Tudo' && custosOperacionais.isEmpty) {
       return const Center(
         child: Text(
-          "Nenhuma venda registrada ainda no Supabase.\nVá em Estoque Atual -> Vendas e registre uma saída!",
+          "Nenhuma movimentação registrada ainda no Supabase.\nVá em Estoque Atual -> Vendas e registre uma saída!",
           textAlign: TextAlign.center,
           style: TextStyle(fontSize: 16, color: Colors.grey),
         ),
       );
     }
 
+    // ---- Construir timeline unificada (vendas + despesas) ----
+    // Cada entrada tem: tipo ('venda' ou 'despesa'), data, e dados relevantes
+    List<Map<String, dynamic>> timelineUnificada = [];
+
+    // Adicionar vendas à timeline
+    for (var venda in historicoFiltrado) {
+      DateTime? dt = extrairDataLocal(venda['criado_em'] ?? venda['data_venda'] ?? venda['created_at']);
+      timelineUnificada.add({
+        'tipo': 'venda',
+        'data': dt,
+        'dados': venda,
+      });
+    }
+
+    // Adicionar despesas variáveis à timeline (filtradas pelo mesmo período)
+    for (var despesa in despesasVariaveis) {
+      DateTime dataDespesa = despesa.criadoEm?.toLocal() ?? agora;
+
+      // Aplicar o mesmo filtro de período às despesas
+      bool incluirDespesa = true;
+      if (_filtroPeriodo == 'Hoje') {
+        incluirDespesa =
+            dataDespesa.year == agora.year &&
+            dataDespesa.month == agora.month &&
+            dataDespesa.day == agora.day;
+      } else if (_filtroPeriodo == '7 Dias') {
+        incluirDespesa = agora.difference(dataDespesa).inDays.abs() <= 7;
+      } else if (_filtroPeriodo == 'Mês') {
+        incluirDespesa =
+            dataDespesa.year == agora.year && dataDespesa.month == agora.month;
+      } else if (_filtroPeriodo != 'Tudo') {
+        incluirDespesa = _obterLabelMes(dataDespesa) == _filtroPeriodo;
+      }
+
+      if (incluirDespesa) {
+        timelineUnificada.add({
+          'tipo': 'despesa',
+          'data': dataDespesa,
+          'dados': despesa,
+        });
+      }
+    }
+
+    // Ordenar timeline por data (mais antigos primeiro, sem data vai pro final)
+    timelineUnificada.sort((a, b) {
+      final dtA = a['data'] as DateTime?;
+      final dtB = b['data'] as DateTime?;
+      if (dtA == null && dtB == null) return 0;
+      if (dtA == null) return 1;
+      if (dtB == null) return -1;
+      return dtA.compareTo(dtB);
+    });
+
     List<FlSpot> vendasSpots = [];
     double totalFaturamento = 0;
-    double faturamentoAcumulado = 0;
+    double totalCustos = 0;
+    double saldoAcumulado = 0;
     List<Widget> historicoDetalhado = [];
 
-    for (int i = 0; i < historicoFiltrado.length; i++) {
-      var venda = historicoFiltrado[i];
-      double valorUnitario =
-          double.tryParse(venda['valor_unitario'].toString()) ?? 0.0;
-      int quantidade =
-          int.tryParse(venda['quantidade_vendida'].toString()) ?? 0;
-      String codigoProduto = venda['produto_codigo'].toString();
+    for (int i = 0; i < timelineUnificada.length; i++) {
+      final entry = timelineUnificada[i];
+      final tipo = entry['tipo'] as String;
 
-      double valorTotalVenda = valorUnitario * quantidade;
-      totalFaturamento += valorTotalVenda;
-      faturamentoAcumulado += valorTotalVenda;
+      if (tipo == 'venda') {
+        var venda = entry['dados'] as Map<String, dynamic>;
+        double valorUnitario =
+            double.tryParse(venda['valor_unitario'].toString()) ?? 0.0;
+        int quantidade =
+            int.tryParse(venda['quantidade_vendida'].toString()) ?? 0;
+        String codigoProduto = venda['produto_codigo'].toString();
 
-      vendasSpots.add(FlSpot(i.toDouble(), faturamentoAcumulado));
+        double valorTotalVenda = valorUnitario * quantidade;
+        totalFaturamento += valorTotalVenda;
+        saldoAcumulado += valorTotalVenda;
 
-      String nomeProduto = "Produto Excluído";
-      try {
-        nomeProduto =
-            estoque.firstWhere((p) => p.codigo == codigoProduto).nome;
-      } catch (_) {}
+        vendasSpots.add(FlSpot(i.toDouble(), saldoAcumulado));
 
-      historicoDetalhado.insert(
-        0,
-        Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            leading: CircleAvatar(
-              backgroundColor: Colors.green.shade50,
-              child: Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 24),
-            ),
-            title: Text(
-              nomeProduto,
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
-            ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                "$quantidade un. vendidas a R\$ ${valorUnitario.toStringAsFixed(2).replaceAll('.', ',')}",
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-              ),
-            ),
-            trailing: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  "+ R\$ ${valorTotalVenda.toStringAsFixed(2).replaceAll('.', ',')}",
-                  style: TextStyle(
-                    color: Colors.green.shade700,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  "Venda Realizada",
-                  style: TextStyle(fontSize: 10, color: Colors.green.shade600, fontWeight: FontWeight.w600),
+        String nomeProduto = "Produto Excluído";
+        try {
+          nomeProduto =
+              estoque.firstWhere((p) => p.codigo == codigoProduto).nome;
+        } catch (_) {}
+
+        // Formatar data da venda no padrão dd/mm/aaaa
+        String dataVendaFormatada = '';
+        final dtVenda = entry['data'] as DateTime?;
+        if (dtVenda != null) {
+          dataVendaFormatada =
+              '${dtVenda.day.toString().padLeft(2, '0')}/'
+              '${dtVenda.month.toString().padLeft(2, '0')}/'
+              '${dtVenda.year}';
+        }
+
+        historicoDetalhado.insert(
+          0,
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              leading: CircleAvatar(
+                backgroundColor: Colors.green.shade50,
+                child: Icon(Icons.check_circle_outline, color: Colors.green.shade700, size: 24),
+              ),
+              title: Text(
+                nomeProduto,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  "$quantidade un. vendidas a R\$ ${valorUnitario.toStringAsFixed(2).replaceAll('.', ',')}",
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                ),
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    "+ R\$ ${valorTotalVenda.toStringAsFixed(2).replaceAll('.', ',')}",
+                    style: TextStyle(
+                      color: Colors.green.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    "Venda Realizada",
+                    style: TextStyle(fontSize: 10, color: Colors.green.shade600, fontWeight: FontWeight.w600),
+                  ),
+                  if (dataVendaFormatada.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      dataVendaFormatada,
+                      style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        // tipo == 'despesa' (despesa variável)
+        var despesa = entry['dados'] as DespesaVariavel;
+        totalCustos += despesa.valor;
+        saldoAcumulado -= despesa.valor;
+
+        vendasSpots.add(FlSpot(i.toDouble(), saldoAcumulado));
+
+        // Formatar data da despesa no padrão dd/mm/aaaa
+        String dataDespesaFormatada = '';
+        final dtDespesa = entry['data'] as DateTime?;
+        if (dtDespesa != null) {
+          dataDespesaFormatada =
+              '${dtDespesa.day.toString().padLeft(2, '0')}/'
+              '${dtDespesa.month.toString().padLeft(2, '0')}/'
+              '${dtDespesa.year}';
+        }
+
+        historicoDetalhado.insert(
+          0,
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.red.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              leading: CircleAvatar(
+                backgroundColor: Colors.red.shade50,
+                child: Icon(Icons.remove_circle_outline, color: Colors.red.shade700, size: 24),
+              ),
+              title: Text(
+                despesa.nome,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4.0),
+                child: Text(
+                  dataDespesaFormatada.isNotEmpty
+                      ? "Despesa Variável • $dataDespesaFormatada"
+                      : "Despesa Variável / Saída de caixa",
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade400),
+                ),
+              ),
+              trailing: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    "- R\$ ${despesa.valor.toStringAsFixed(2).replaceAll('.', ',')}",
+                    style: TextStyle(
+                      color: Colors.red.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    "Pagamento / Saída",
+                    style: TextStyle(fontSize: 10, color: Colors.red.shade600, fontWeight: FontWeight.w600),
+                  ),
+                  if (dataDespesaFormatada.isNotEmpty) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      dataDespesaFormatada,
+                      style: TextStyle(fontSize: 9, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     }
 
-    double totalCustosMensal = custosOperacionais.fold(0.0, (s, c) => s + c.valor);
-    // Proporcionalizar custos operacionais conforme o período selecionado
-    double totalCustos;
-    if (_filtroPeriodo == 'Hoje') {
-      totalCustos = totalCustosMensal / 30.0; // Custo diário
-    } else if (_filtroPeriodo == '7 Dias') {
-      totalCustos = totalCustosMensal * 7 / 30.0; // Custo semanal
-    } else {
-      totalCustos = totalCustosMensal; // Mês inteiro ou 'Tudo'
-    }
     double saldoCaixa = totalFaturamento - totalCustos;
     double rentabilidadePct =
         totalFaturamento > 0
@@ -678,7 +831,10 @@ class _TelaDashboardState extends State<TelaDashboard> {
                       selectedColor: Colors.blue.shade800,
                       onSelected: (selected) {
                         if (selected) {
-                          setState(() => _filtroPeriodo = periodo);
+                          setState(() {
+                            _filtroPeriodo = periodo;
+                            _itensVisiveis = 10;
+                          });
                         }
                       },
                     ),
@@ -867,7 +1023,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
                         return LineTooltipItem(
-                          'Acumulado:\nR\$ ${spot.y.toStringAsFixed(2).replaceAll('.', ',')}',
+                          'Saldo:\nR\$ ${spot.y.toStringAsFixed(2).replaceAll('.', ',')}',
                           const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                         );
                       }).toList();
@@ -895,18 +1051,48 @@ class _TelaDashboardState extends State<TelaDashboard> {
             ),
           ),
           const SizedBox(height: 24),
-          const Text("Detalhamento das Vendas", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          const Text("Detalhamento das Movimentações", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
           const Divider(),
           historicoDetalhado.isEmpty
               ? Container(
                   padding: const EdgeInsets.all(24),
                   alignment: Alignment.center,
-                  child: const Text("Nenhuma venda registrada neste período.", style: TextStyle(color: Colors.blueGrey)),
+                  child: const Text("Nenhuma movimentação registrada neste período.", style: TextStyle(color: Colors.blueGrey)),
                 )
-              : ListView(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  children: historicoDetalhado,
+              : Column(
+                  children: [
+                    ListView(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: historicoDetalhado.take(_itensVisiveis).toList(),
+                    ),
+                    if (_itensVisiveis < historicoDetalhado.length) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _itensVisiveis += 10;
+                            });
+                          },
+                          icon: const Icon(Icons.expand_more),
+                          label: Text(
+                            "Mostrar mais (${historicoDetalhado.length - _itensVisiveis > 0 ? historicoDetalhado.length - _itensVisiveis : 0} restantes)",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.blue.shade800,
+                            side: BorderSide(color: Colors.blue.shade300),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
           if (_analiseIA != null) ...[
             const SizedBox(height: 16),
@@ -1036,7 +1222,7 @@ class _TelaDashboardState extends State<TelaDashboard> {
                 children: [
                   Padding(
                     padding: const EdgeInsets.all(8.0),
-                    child: Text("Debug: Estoque (${estoque.length}) | Vendas (${historicoVendas.length})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+                    child: Text("Estoque (${estoque.length}) | Vendas (${historicoVendas.length})", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                   ),
                   Expanded(
                     child: TabBarView(

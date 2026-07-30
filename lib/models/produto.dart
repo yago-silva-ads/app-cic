@@ -86,17 +86,4 @@ class Produto {
     });
     return custoCalculado;
   }
-
-  /// 📊 Calcula o Custo Médio Ponderado a partir de um histórico de aquisições
-  static double calcularCustoMedioPonderado(List<dynamic> aquisicoes) {
-    if (aquisicoes.isEmpty) return 0.0;
-    double somaTotalGasto = 0.0;
-    int somaQuantidade = 0;
-    for (var a in aquisicoes) {
-      somaTotalGasto += (a.quantidade * a.valorUnitario);
-      somaQuantidade += a.quantidade as int;
-    }
-    if (somaQuantidade == 0) return 0.0;
-    return somaTotalGasto / somaQuantidade;
-  }
 }

@@ -2,8 +2,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/produto.dart';
 import '../models/custo_operacional.dart';
+import '../models/despesa_variavel.dart';
 import '../models/alerta.dart';
-import '../models/aquisicao.dart';
 
 class SupabaseHelper {
   static final supabase = Supabase.instance.client;
@@ -95,57 +95,6 @@ class SupabaseHelper {
     }
   }
 
-  /// 📦 Registrar uma nova aquisição e atualizar o custo médio ponderado do produto
-  static Future<double> registrarAquisicao(Aquisicao aquisicao, {required Produto produto}) async {
-    try {
-      final jsonAquisicao = aquisicao.toJson();
-      jsonAquisicao['empresa_id'] = _empresaId;
-      await supabase.from('historico_aquisicoes').insert(jsonAquisicao);
-
-      // Buscar histórico completo para recálculo do custo médio
-      final historico = await getHistoricoAquisicoes(aquisicao.produtoCodigo);
-      double novoCustoMedio = aquisicao.valorUnitario;
-      if (historico.isNotEmpty) {
-        novoCustoMedio = Produto.calcularCustoMedioPonderado(historico);
-      }
-
-      // Atualizar quantidade total e valor de compra do produto
-      int novaQtd = produto.quantidade + aquisicao.quantidade;
-      double novoValorVenda = produto.valorVenda;
-      if (produto.markup > 0) {
-        novoValorVenda = novoCustoMedio * produto.markup;
-      }
-
-      await supabase.from('produtos').update({
-        'quantidade': novaQtd,
-        'valor_compra': novoCustoMedio,
-        'valor_venda': novoValorVenda,
-      }).eq('codigo', aquisicao.produtoCodigo).eq('empresa_id', _empresaId);
-
-      return novoCustoMedio;
-    } catch (e) {
-      print("Erro ao registrar aquisição no Supabase: $e");
-      rethrow;
-    }
-  }
-
-  /// 📜 Buscar histórico de aquisições de um produto específico
-  static Future<List<Aquisicao>> getHistoricoAquisicoes(String produtoCodigo) async {
-    try {
-      final response = await supabase
-          .from('historico_aquisicoes')
-          .select()
-          .eq('empresa_id', _empresaId)
-          .eq('produto_codigo', produtoCodigo)
-          .order('data_aquisicao', ascending: false);
-
-      return (response as List).map((json) => Aquisicao.fromJson(json)).toList();
-    } catch (e) {
-      print("Erro ao buscar histórico de aquisições: $e");
-      return [];
-    }
-  }
-
   static Future<void> deleteProduto(String codigo) async {
     await supabase.from('produtos').delete().eq('codigo', codigo).eq('empresa_id', _empresaId);
   }
@@ -214,6 +163,47 @@ class SupabaseHelper {
       }).toList();
       await supabase.from('custos_operacionais').insert(dataInsert);
     }
+  }
+
+  // ==================== DESPESAS VARIÁVEIS ====================
+  // Despesas pontuais (pagamento de funcionários, saídas avulsas)
+  // registradas pelo botão "Pagar Funcionário / Saída" no Fluxo de Caixa.
+  // Separadas dos custos fixos operacionais (aluguel, luz, água).
+
+  /// 💸 Inserir uma nova despesa variável
+  static Future<void> insertDespesaVariavel(String nome, double valor) async {
+    await supabase.from('despesas_variaveis').insert({
+      'nome': nome,
+      'valor': valor,
+      'empresa_id': _empresaId, // 🔒 Multi-tenant
+    });
+  }
+
+  /// 📋 Buscar todas as despesas variáveis do tenant (ordenadas por data)
+  static Future<List<DespesaVariavel>> getDespesasVariaveis() async {
+    try {
+      final response = await supabase
+          .from('despesas_variaveis')
+          .select()
+          .eq('empresa_id', _empresaId)
+          .order('created_at', ascending: true);
+      print("Despesas variáveis encontradas: ${response.length}"); // DEBUG
+      return (response as List)
+          .map((json) => DespesaVariavel.fromJson(json))
+          .toList();
+    } catch (e) {
+      print("Erro ao buscar despesas variáveis: $e");
+      return [];
+    }
+  }
+
+  /// 🗑️ Deletar uma despesa variável por ID
+  static Future<void> deleteDespesaVariavel(String id) async {
+    await supabase
+        .from('despesas_variaveis')
+        .delete()
+        .eq('id', id)
+        .eq('empresa_id', _empresaId);
   }
 
 

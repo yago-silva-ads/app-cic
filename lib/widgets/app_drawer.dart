@@ -5,6 +5,7 @@ import '../screens/leitor_screen.dart';
 import '../screens/tela_dashboard.dart';
 import '../screens/tela_estoque.dart';
 import '../screens/tela_vendedor.dart';
+import '../screens/tela_despesas_variaveis.dart';
 import '../screens/tela_alertas.dart';
 import '../screens/tela_suporte.dart';
 import '../screens/tela_tutorial_web.dart';
@@ -145,6 +146,19 @@ class AppDrawer extends StatelessWidget {
                     Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(builder: (_) => const TelaVendedor()),
+                    );
+                  },
+                ),
+                _buildMenuItem(
+                  context: context,
+                  icon: Icons.receipt_long,
+                  title: 'Despesas Variáveis',
+                  color: Colors.red.shade600,
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const TelaDespesasVariaveis()),
                     );
                   },
                 ),

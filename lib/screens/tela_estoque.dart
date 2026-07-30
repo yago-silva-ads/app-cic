@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import '../models/produto.dart';
-import '../models/aquisicao.dart';
 import '../utils/moeda_formatter.dart';
 import '../services/supabase_helper.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'leitor_screen.dart';
+import 'tela_dashboard.dart';
+import 'tela_vendedor.dart';
+import 'tela_login.dart';
 import 'tela_alertas.dart';
 import 'tela_suporte.dart';
+import 'tela_tutorial_web.dart';
 import '../widgets/app_drawer.dart';
 
 class TelaEstoque extends StatefulWidget {
@@ -165,18 +170,18 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                           ),
                           const SizedBox(height: 8),
                           Text("Qtd: ${p.quantidade}", style: p.quantidade <= 5 ? const TextStyle(color: Colors.red, fontWeight: FontWeight.bold) : null),
-                          Text("Custo Médio: R\$ ${p.valorCompra.toStringAsFixed(2).replaceAll('.', ',')}", style: const TextStyle(fontWeight: FontWeight.w500)),
+                          Text("Custo: R\$ ${p.valorCompra.toStringAsFixed(2).replaceAll('.', ',')}"),
                           const SizedBox(height: 4),
                           // Lógica Inteligente de Exibição das Datas
                           ...(() {
                             String textEntrada = p.dataEntrada != null 
                               ? "Entrada: ${p.dataEntrada!.day.toString().padLeft(2, '0')}/${p.dataEntrada!.month.toString().padLeft(2, '0')}/${p.dataEntrada!.year}"
-                              : "Entrada não registada";
+                              : "Entrada não registrada";
 
                             Widget validadeWidget;
                             if (p.dataValidade == null) {
                               validadeWidget = Text(
-                                "Validade não registada",
+                                "Validade não registrada",
                                 style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                               );
                             } else {
@@ -228,21 +233,8 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                             children: [
                               Row(
                                 children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, color: Colors.blue),
-                                    tooltip: 'Editar Produto',
-                                    onPressed: () => _edit(i),
-                                    constraints: const BoxConstraints(),
-                                    padding: EdgeInsets.zero,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  IconButton(
-                                    icon: const Icon(Icons.shopping_bag_outlined, color: Colors.teal),
-                                    tooltip: 'Histórico de Aquisições & Custo Médio',
-                                    onPressed: () => _abrirHistoricoAquisicoes(p),
-                                    constraints: const BoxConstraints(),
-                                    padding: EdgeInsets.zero,
-                                  ),
+                                  IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _edit(i), constraints: const BoxConstraints(), padding: EdgeInsets.zero),
+                                  const SizedBox(width: 16),
                                 ],
                               ),
                               Text("Lucro Unid: R\$ ${lucroUnid.toStringAsFixed(2).replaceAll('.', ',')}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
@@ -848,347 +840,6 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
           _buildAbaInventario(),
           _buildAbaVendas(),
         ],
-      ),
-    );
-  }
-
-  // ==================== DIÁLOGOS DE AQUISIÇÕES E CUSTO MÉDIO ====================
-
-  void _abrirHistoricoAquisicoes(Produto produto) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        List<Aquisicao> aquisicoes = [];
-        bool carregando = true;
-
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            void carregarAquisicoes() async {
-              setDialogState(() => carregando = true);
-              final lista = await SupabaseHelper.getHistoricoAquisicoes(produto.codigo);
-              setDialogState(() {
-                aquisicoes = lista;
-                carregando = false;
-              });
-            }
-
-            if (carregando && aquisicoes.isEmpty) {
-              carregarAquisicoes();
-            }
-
-            double custoMedioCalculado = aquisicoes.isNotEmpty
-                ? Produto.calcularCustoMedioPonderado(aquisicoes)
-                : produto.valorCompra;
-
-            int totalUnidadesAdquiridas = aquisicoes.fold(0, (sum, a) => sum + a.quantidade);
-            double totalInvestido = aquisicoes.fold(0.0, (sum, a) => sum + a.custoTotal);
-
-            return AlertDialog(
-              scrollable: true,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Row(
-                children: [
-                  const Icon(Icons.shopping_bag, color: Colors.teal),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      "Aquisições: ${produto.nome}",
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Card resumo de Custo Médio e Totais
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.teal.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  "Custo Médio Ponderado:",
-                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.teal),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  "R\$ ${custoMedioCalculado.toStringAsFixed(2).replaceAll('.', ',')}",
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.teal.shade900,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const Divider(height: 10),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                "Estoque: ${produto.quantidade} unid",
-                                style: const TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
-                              ),
-                              Flexible(
-                                child: Text(
-                                  "Comprado: $totalUnidadesAdquiridas unid (R\$ ${totalInvestido.toStringAsFixed(2).replaceAll('.', ',')})",
-                                  textAlign: TextAlign.end,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: () {
-                        _exibirFormularioNovaAquisicao(ctx, produto, () {
-                          carregarAquisicoes();
-                          _onUpdate();
-                        });
-                      },
-                      icon: const Icon(Icons.add_shopping_cart, size: 18),
-                      label: const Text("Registrar Nova Aquisição"),
-                    ),
-                    const SizedBox(height: 12),
-                    const Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        "Histórico de Lotes / Compras:",
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    carregando
-                        ? const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        : aquisicoes.isEmpty
-                            ? Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Text(
-                                    "Nenhuma aquisição registrada no histórico.\nClique acima para registrar a primeira compra!",
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                  ),
-                                ),
-                              )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: aquisicoes.length,
-                                itemBuilder: (c, idx) {
-                                  final item = aquisicoes[idx];
-                                  final dataStr =
-                                      "${item.dataAquisicao.day.toString().padLeft(2, '0')}/${item.dataAquisicao.month.toString().padLeft(2, '0')}/${item.dataAquisicao.year}";
-
-                                  return Card(
-                                    elevation: 1,
-                                    margin: const EdgeInsets.symmetric(vertical: 4),
-                                    child: ListTile(
-                                      dense: true,
-                                      leading: const CircleAvatar(
-                                        backgroundColor: Colors.tealAccent,
-                                        child: Icon(Icons.inventory, size: 18, color: Colors.teal),
-                                      ),
-                                      title: Text(
-                                        "${item.quantidade} unid  ×  R\$ ${item.valorUnitario.toStringAsFixed(2).replaceAll('.', ',')}",
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      subtitle: Text(
-                                        "Data: $dataStr${item.fornecedor != null && item.fornecedor!.isNotEmpty ? ' • ${item.fornecedor}' : ''}",
-                                        style: const TextStyle(fontSize: 11),
-                                      ),
-                                      trailing: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          "R\$ ${item.custoTotal.toStringAsFixed(2).replaceAll('.', ',')}",
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.teal,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text("Fechar"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _exibirFormularioNovaAquisicao(
-    BuildContext dialogContext,
-    Produto produto,
-    VoidCallback onAquisiAdicionada,
-  ) {
-    final qtdCtrl = TextEditingController();
-    final valorUnitCtrl = TextEditingController(
-      text: produto.valorCompra > 0 ? produto.valorCompra.toStringAsFixed(2) : '',
-    );
-    final fornecedorCtrl = TextEditingController();
-    final obsCtrl = TextEditingController();
-    bool salvando = false;
-
-    showDialog(
-      context: dialogContext,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setFormState) {
-          return AlertDialog(
-            scrollable: true,
-            title: Text("Nova Aquisição: ${produto.nome}"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: qtdCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: "Quantidade comprada *",
-                      hintText: "Ex: 20",
-                      prefixIcon: Icon(Icons.numbers),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: valorUnitCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: "Custo por Unidade (R\$) *",
-                      hintText: "Ex: 15.50",
-                      prefixIcon: Icon(Icons.attach_money),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: fornecedorCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Fornecedor (opcional)",
-                      hintText: "Ex: Distribuidora Silva",
-                      prefixIcon: Icon(Icons.business),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: obsCtrl,
-                    decoration: const InputDecoration(
-                      labelText: "Observação (opcional)",
-                      hintText: "Ex: NF 1234 / Lote promoção",
-                      prefixIcon: Icon(Icons.notes),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: salvando ? null : () => Navigator.pop(ctx),
-                child: const Text("Cancelar"),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                onPressed: salvando
-                    ? null
-                    : () async {
-                        int? qtd = int.tryParse(qtdCtrl.text.trim());
-                        String valorTxt = valorUnitCtrl.text.replaceAll(',', '.').trim();
-                        double? valorUnit = double.tryParse(valorTxt);
-
-                        if (qtd == null || qtd <= 0 || valorUnit == null || valorUnit < 0) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Preencha a quantidade e valor unitário corretamente."),
-                              backgroundColor: Colors.orange,
-                            ),
-                          );
-                          return;
-                        }
-
-                        setFormState(() => salvando = true);
-                        try {
-                          final novaAquisicao = Aquisicao(
-                            produtoCodigo: produto.codigo,
-                            dataAquisicao: DateTime.now(),
-                            quantidade: qtd,
-                            valorUnitario: valorUnit,
-                            fornecedor: fornecedorCtrl.text.trim(),
-                            observacao: obsCtrl.text.trim(),
-                          );
-
-                          double novoCustoMedio = await SupabaseHelper.registrarAquisicao(
-                            novaAquisicao,
-                            produto: produto,
-                          );
-
-                          if (context.mounted) {
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  "Aquisição registrada! Novo Custo Médio: R\$ ${novoCustoMedio.toStringAsFixed(2).replaceAll('.', ',')}",
-                                ),
-                                backgroundColor: Colors.green,
-                              ),
-                            );
-                            onAquisiAdicionada();
-                          }
-                        } catch (e) {
-                          setFormState(() => salvando = false);
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text("Erro ao registrar aquisição: $e"), backgroundColor: Colors.red),
-                            );
-                          }
-                        }
-                      },
-                child: salvando
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text("Salvar Aquisição"),
-              ),
-            ],
-          );
-        },
       ),
     );
   }
