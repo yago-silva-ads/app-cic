@@ -13,7 +13,7 @@ import '../widgets/app_drawer.dart';
 class TelaTutorialWeb extends StatelessWidget {
   const TelaTutorialWeb({super.key});
 
-  static const String urlPortalWeb = 'https://web-eight-blond-46.vercel.app';
+  static const String urlPortalWeb = 'https://web-fawn-tau-6yhwfbhghw.vercel.app';
 
   Future<void> _abrirPortalWeb(BuildContext context) async {
     final url = Uri.parse(urlPortalWeb);
@@ -181,7 +181,7 @@ class TelaTutorialWeb extends StatelessWidget {
                   SizedBox(height: 8),
                   Text(
                     '1. Abra o navegador (Google Chrome ou Edge) no PC.\n'
-                    '2. Digite o endereço: web-eight-blond-46.vercel.app\n'
+                    '2. Digite o endereço: web-fawn-tau-6yhwfbhghw.vercel.app\n'
                     '3. Digite o mesmo E-mail e Senha que você usa aqui no App.\n'
                     '4. Pronto! Seus dados aparecerão sincronizados instantaneamente.',
                     style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
