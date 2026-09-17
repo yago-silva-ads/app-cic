@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io' show File;
+import 'package:file_picker/file_picker.dart';
+import 'package:xml/xml.dart' as xml;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,7 +18,9 @@ import 'tela_login.dart';
 import '../widgets/app_drawer.dart';
 
 class LeitorScreen extends StatefulWidget {
-  const LeitorScreen({super.key});
+  final bool isEmbedded;
+  const LeitorScreen({super.key, this.isEmbedded = false});
+
   @override
   State<LeitorScreen> createState() => _LeitorScreenState();
 }
@@ -317,12 +322,74 @@ class _LeitorScreenState extends State<LeitorScreen> {
     scannerController.start();
   }
 
+  Future<void> _importarXML() async {
+    try {
+      var result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+      );
+
+      if (result != null && result.isNotEmpty) {
+        String xmlString;
+        if (kIsWeb) {
+          final bytes = await result.first.readAsBytes();
+          xmlString = String.fromCharCodes(bytes);
+        } else {
+          final file = File(result.first.path!);
+          xmlString = await file.readAsString();
+        }
+
+        final document = xml.XmlDocument.parse(xmlString);
+        
+        final dets = document.findAllElements('det');
+        if (dets.isNotEmpty) {
+          final prod = dets.first.findElements('prod').first;
+          
+          final cEAN = prod.findElements('cEAN').isEmpty ? '' : prod.findElements('cEAN').first.innerText;
+          final xProd = prod.findElements('xProd').isEmpty ? '' : prod.findElements('xProd').first.innerText;
+          final vUnCom = prod.findElements('vUnCom').isEmpty ? '' : prod.findElements('vUnCom').first.innerText;
+          
+          setState(() {
+            if (cEAN.isNotEmpty && cEAN != 'SEM GTIN') {
+              codigoLido = cEAN;
+              codigoManualController.text = cEAN;
+            }
+            nomeController.text = xProd;
+            
+            if (vUnCom.isNotEmpty) {
+              double custo = double.parse(vUnCom);
+              valorCompraController.text = custo.toStringAsFixed(2).replaceAll('.', ',');
+              _calcularVendaEmTempoReal();
+            }
+          });
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("XML importado com sucesso!"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          throw Exception("Nenhum produto encontrado no XML.");
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Erro ao importar XML: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Leitor CIC 2026')),
-      drawer: const AppDrawer(),
-      body: SingleChildScrollView(
+    final contentBody = SingleChildScrollView(
         child: Column(
           children: [
             // Card de Entrada Direta / Leitor USB / Digitação Rápida (Essencial no Web & Mobile)
@@ -377,6 +444,12 @@ class _LeitorScreenState extends State<LeitorScreen> {
                     ),
                     child: const Text('Consultar', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _importarXML,
+                    icon: const Icon(Icons.upload_file, color: Color(0xFF0D47A1)),
+                    tooltip: 'Importar XML (NFe)',
+                  ),
                 ],
               ),
             ),
@@ -385,19 +458,21 @@ class _LeitorScreenState extends State<LeitorScreen> {
             if (kIsWeb)
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Colors.amber.shade100,
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
                 ),
                 child: const Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.black87),
+                    Icon(Icons.info_outline, size: 20, color: Colors.black87),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        "Dica Web/PC: Use o campo acima com Leitor USB ou digite o código se a câmera do navegador estiver bloqueada.",
-                        style: TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
+                        "Dica iPhone/Web: A câmera pode não abrir no navegador (Safari bloqueia o acesso à câmera fora de conexões HTTPS seguras). Digite o código de barras no campo acima e clique em Consultar.",
+                        style: TextStyle(fontSize: 12, color: Colors.black87, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -408,6 +483,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
               height: 200,
               child: MobileScanner(
                 controller: scannerController,
+                fit: BoxFit.cover,
                 onDetect: (cap) {
                   if (cap.barcodes.isEmpty) return;
                   final barcode = cap.barcodes.first;
@@ -650,7 +726,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
                           const Padding(
                             padding: EdgeInsets.only(top: 8.0),
                             child: Text(
-                              "⚠️ Risco de Prejuízo: Margem muito baixa para cobrir custos fixos!",
+                              "Risco de Prejuízo: Margem muito baixa para cobrir custos fixos!",
                               style: TextStyle(
                                 color: Colors.red,
                                 fontWeight: FontWeight.bold,
@@ -707,7 +783,17 @@ class _LeitorScreenState extends State<LeitorScreen> {
             ),
           ],
         ),
+      );
+
+    if (widget.isEmbedded) {
+      return contentBody;
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Leitor Inteligente', style: TextStyle(fontWeight: FontWeight.bold)),
       ),
+      body: contentBody,
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_drawer.dart';
+import '../services/app_state.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Tela de Suporte & Fale Conosco (Ajuda ao Empreendedor)
@@ -51,16 +52,15 @@ class TelaSuporte extends StatelessWidget {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
-          title: const Text('Contato WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          title: const Text('Contato WhatsApp', style: TextStyle(fontWeight: FontWeight.bold)),
           content: const Text(
             'Não conseguimos abrir o WhatsApp automaticamente no seu dispositivo. Copie nosso link de atendimento:',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(fontSize: 14),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Fechar', style: TextStyle(color: Colors.white54)),
+              child: const Text('Fechar'),
             ),
             ElevatedButton.icon(
               onPressed: () {
@@ -93,16 +93,15 @@ class TelaSuporte extends StatelessWidget {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF1E1E1E),
-            title: const Text('E-mail de Suporte', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            title: const Text('E-mail de Suporte', style: TextStyle(fontWeight: FontWeight.bold)),
             content: const Text(
               'Nosso e-mail oficial é:\n\nsuporte@appcic.com.br\n\nDeseja copiar o endereço para o seu aplicativo de e-mail favorito?',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(fontSize: 14),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Fechar', style: TextStyle(color: Colors.white54)),
+                child: const Text('Fechar'),
               ),
               ElevatedButton.icon(
                 onPressed: () {
@@ -130,7 +129,6 @@ class TelaSuporte extends StatelessWidget {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
@@ -139,7 +137,7 @@ class TelaSuporte extends StatelessWidget {
             Expanded(
               child: Text(
                 'Instalar App Android (APK)',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
             ),
           ],
@@ -150,15 +148,15 @@ class TelaSuporte extends StatelessWidget {
           children: [
             const Text(
               'O aplicativo nativo permite usar a câmera traseira em altíssima velocidade e acessar o sistema sem precisar abrir o navegador.',
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              style: TextStyle(fontSize: 14),
             ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.black45,
+                color: Colors.black12,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
               ),
               child: const Row(
                 children: [
@@ -168,7 +166,7 @@ class TelaSuporte extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Link de Download Direto (~73 MB)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text('Link de Download Direto (~73 MB)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                         SizedBox(height: 4),
                         Text('web-eight-blond-46.vercel.app/download/app-cic.apk', style: TextStyle(color: Color(0xFFD4A843), fontSize: 11)),
                       ],
@@ -182,7 +180,7 @@ class TelaSuporte extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar', style: TextStyle(color: Colors.white54)),
+            child: const Text('Fechar'),
           ),
           ElevatedButton.icon(
             onPressed: () {
@@ -225,11 +223,8 @@ class TelaSuporte extends StatelessWidget {
 
     return Scaffold(
       drawer: const AppDrawer(),
-      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('Central de Ajuda & Suporte', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-        backgroundColor: const Color(0xFF1E1E1E),
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Central de Ajuda & Suporte', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -345,36 +340,35 @@ class TelaSuporte extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Outros Canais & Diagnóstico
-            const Text(
+            Text(
               'Outros Canais & Status',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
             Card(
-              color: const Color(0xFF1E1E1E),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               child: Column(
                 children: [
                   ListTile(
-                    leading: const Icon(Icons.email_outlined, color: Color(0xFFD4A843)),
-                    title: const Text('Enviar E-mail', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('suporte@appcic.com.br', style: TextStyle(color: Colors.white70)),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white54),
+                    leading: const Icon(Icons.email_outlined, color: Colors.blue),
+                    title: const Text('Enviar E-mail', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: const Text('suporte@appcic.com.br'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                     onTap: () => _abrirEmail(context),
                   ),
-                  const Divider(color: Colors.white12, height: 1),
-                  ListTile(
-                    leading: const Icon(Icons.shield_outlined, color: Colors.greenAccent),
-                    title: const Text('Status de Segurança (RLS)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                    subtitle: const Text('Supabase Cloud Blindado — 100% Ativo', style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-                    trailing: const Icon(Icons.check_circle, color: Colors.greenAccent),
+                  const Divider(height: 1),
+                  const ListTile(
+                    leading: Icon(Icons.shield_outlined, color: Colors.green),
+                    title: Text('Status de Segurança (RLS)', style: TextStyle(fontWeight: FontWeight.w600)),
+                    subtitle: Text('Supabase Cloud Blindado — 100% Ativo', style: TextStyle(color: Colors.green, fontSize: 12)),
+                    trailing: Icon(Icons.check_circle, color: Colors.green),
                   ),
-                  const Divider(color: Colors.white12, height: 1),
+                  const Divider(height: 1),
                   ListTile(
-                    leading: const Icon(Icons.fingerprint, color: Colors.blueAccent),
-                    title: const Text('ID do Comércio (Tenant)', style: TextStyle(color: Colors.white, fontSize: 13)),
-                    subtitle: Text(tenantId, style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                    leading: const Icon(Icons.fingerprint, color: Colors.blue),
+                    title: const Text('ID do Comércio (Tenant)', style: TextStyle(fontSize: 13)),
+                    subtitle: Text(tenantId, style: const TextStyle(fontSize: 11)),
                   ),
                 ],
               ),
@@ -383,9 +377,9 @@ class TelaSuporte extends StatelessWidget {
             const SizedBox(height: 24),
 
             // Perguntas Frequentes (FAQ)
-            const Text(
+            Text(
               'Perguntas Frequentes (FAQ)',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
@@ -413,19 +407,16 @@ class TelaSuporte extends StatelessWidget {
 
   Widget _buildFaqItem(String pergunta, String resposta) {
     return Card(
-      color: const Color(0xFF1E1E1E),
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ExpansionTile(
-        title: Text(pergunta, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-        iconColor: const Color(0xFFD4A843),
-        collapsedIconColor: Colors.white54,
+        title: Text(pergunta, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
               resposta,
-              style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+              style: const TextStyle(fontSize: 13, height: 1.4),
             ),
           ),
         ],

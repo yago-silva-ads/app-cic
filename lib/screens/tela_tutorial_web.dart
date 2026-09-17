@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import '../widgets/app_drawer.dart';
+import '../services/app_state.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Tela de Tutorial & Acesso Rápido ao Portal Web Looker Studio

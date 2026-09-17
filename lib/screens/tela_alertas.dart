@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/alerta.dart';
 import '../services/supabase_helper.dart';
 import '../widgets/app_drawer.dart';
+import '../services/app_state.dart';
 
 /// Tela dedicada para visualizar, filtrar e gerenciar alertas do sistema.
 /// Exibe alertas de validade, estoque baixo, prejuízo e sugestões da IA.
@@ -43,7 +44,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Alerta marcado como lido ✅'),
+        content: Text('Alerta marcado como lido'),
         duration: Duration(seconds: 1),
       ),
     );
@@ -103,11 +104,8 @@ class _TelaAlertasState extends State<TelaAlertas> {
     final alertasAltos = alertas.where((a) => a.severidade == 'ALTO').length;
 
     return Scaffold(
-      drawer: const AppDrawer(),
       appBar: AppBar(
-        title: const Text('🔔 Central de Alertas'),
-        backgroundColor: Colors.blueGrey.shade900,
-        foregroundColor: Colors.white,
+        title: const Text('Central de Alertas', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (alertas.isNotEmpty)
             IconButton(
@@ -147,8 +145,8 @@ class _TelaAlertasState extends State<TelaAlertas> {
                   Expanded(
                     child: Text(
                       alertasCriticos > 0
-                          ? '🚨 $alertasCriticos alerta(s) CRÍTICO(S) exigem ação imediata!'
-                          : '📋 ${alertas.length} alerta(s) pendente(s)',
+                          ? '$alertasCriticos alerta(s) CRÍTICO(S) exigem ação imediata!'
+                          : '${alertas.length} alerta(s) pendente(s)',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: alertasCriticos > 0 ? Colors.red.shade800 : Colors.blueGrey.shade800,
@@ -188,7 +186,7 @@ class _TelaAlertasState extends State<TelaAlertas> {
                             Icon(Icons.check_circle_outline, size: 64, color: Colors.green.shade300),
                             const SizedBox(height: 12),
                             Text(
-                              'Tudo certo! Nenhum alerta pendente. ✅',
+                              'Tudo certo! Nenhum alerta pendente.',
                               style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
                             ),
                           ],

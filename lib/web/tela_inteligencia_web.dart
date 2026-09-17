@@ -17,13 +17,14 @@ import '../services/supabase_helper.dart';
 /// - Histórico de relatórios salvos
 /// ═══════════════════════════════════════════════════════════════
 
-const Color _bgDark = Color(0xFF0D0D0D);
-const Color _cardDark = Color(0xFF1A1A1A);
-const Color _cardBorder = Color(0xFF2A2A2A);
-const Color _accentGold = Color(0xFFD4A843);
-const Color _accentTeal = Color(0xFF00B8AA);
-const Color _textPrimary = Color(0xFFF5F5F5);
-const Color _textSecondary = Color(0xFF9E9E9E);
+const Color _bgDark       = Color(0xFF080B0F);
+const Color _cardDark     = Color(0xFF121820);
+const Color _cardBorder   = Color(0xFF1E2A36);
+const Color _glassBorder  = Color(0xFF253040);
+const Color _accentGold   = Color(0xFFD4A843);
+const Color _accentTeal   = Color(0xFF00C4B4);
+const Color _textPrimary  = Color(0xFFEDF2F7);
+const Color _textSecondary = Color(0xFF6B7FA3);
 
 class TelaInteligenciaWeb extends StatefulWidget {
   final List<Produto> estoque;
@@ -155,8 +156,15 @@ class _TelaInteligenciaWebState extends State<TelaInteligenciaWeb> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: _cardDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _cardBorder),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _glassBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,8 +246,15 @@ class _TelaInteligenciaWebState extends State<TelaInteligenciaWeb> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: _cardDark,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _cardBorder),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _glassBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

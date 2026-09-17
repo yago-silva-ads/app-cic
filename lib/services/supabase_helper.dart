@@ -53,7 +53,12 @@ class SupabaseHelper {
   // Inserir ou Atualizar Produto (Upsert)
   static Future<void> insertProduto(Produto p) async {
     try {
-      final empId = _empresaId.isNotEmpty ? _empresaId : p.empresaId;
+      final user = supabase.auth.currentUser;
+      if (user == null) {
+        throw Exception("Sessão expirada. Por favor, faça login novamente.");
+      }
+      
+      final empId = user.id;
       final data = <String, dynamic>{
         'codigo': p.codigo,
         'nome': p.nome,
@@ -66,13 +71,28 @@ class SupabaseHelper {
         'data_entrada': p.dataEntrada?.toIso8601String().split('T')[0],
         'data_validade': p.dataValidade?.toIso8601String().split('T')[0],
         'vendidas': p.vendidas,
+        'empresa_id': empId, // Garantido ser o UID correto
       };
 
-      if (empId != null) {
-        data['empresa_id'] = empId;
-      }
+      // Verifica se o produto já existe para ESTA empresa
+      final existing = await supabase
+          .from('produtos')
+          .select('id')
+          .eq('codigo', p.codigo)
+          .eq('empresa_id', empId)
+          .maybeSingle();
 
-      await supabase.from('produtos').upsert(data, onConflict: 'codigo');
+      if (existing != null) {
+        // Atualiza o produto existente desta empresa
+        await supabase
+            .from('produtos')
+            .update(data)
+            .eq('codigo', p.codigo)
+            .eq('empresa_id', empId);
+      } else {
+        // Tenta inserir um novo produto para esta empresa
+        await supabase.from('produtos').insert(data);
+      }
       print("Produto inserido/atualizado com sucesso: ${p.nome}");
     } catch (e) {
       print("Erro no SupabaseHelper.insertProduto: $e");
@@ -86,12 +106,16 @@ class SupabaseHelper {
     int qtdVendida,
     double valorUnid,
   ) async {
-    await supabase.from('historico_vendas').insert({
-      'produto_codigo': codigoProduto,
-      'quantidade_vendida': qtdVendida,
-      'valor_unitario': valorUnid,
-      'empresa_id': _empresaId, // 🔒 Multi-tenant
-    });
+    try {
+      await supabase.from('historico_vendas').insert({
+        'produto_codigo': codigoProduto,
+        'quantidade_vendida': qtdVendida,
+        'valor_unitario': valorUnid,
+        'empresa_id': _empresaId, // 🔒 Multi-tenant
+      });
+    } catch (e) {
+      print("Erro ao registrar venda no Supabase: $e");
+    }
   }
 
   // Recuperar Histórico de Vendas para o DashBoard
@@ -162,7 +186,11 @@ class SupabaseHelper {
   }
 
   static Future<void> deleteProduto(String codigo) async {
-    await supabase.from('produtos').delete().eq('codigo', codigo).eq('empresa_id', _empresaId);
+    try {
+      await supabase.from('produtos').delete().eq('codigo', codigo).eq('empresa_id', _empresaId);
+    } catch (e) {
+      print("Erro ao deletar produto: $e");
+    }
   }
 
   // Buscar custos operacionais do Supabase (Multi-tenant via RLS)
@@ -183,51 +211,59 @@ class SupabaseHelper {
     }
   }
 
-  // Substituir/salvar custos operacionais no Supabase (Multi-tenant via RLS)
   static Future<void> replaceCustosOperacionais(
     List<CustoOperacional> custos,
   ) async {
-    // 1. Identificar IDs que ainda existem na nova lista
-    final idsExistentes = custos
-        .where((c) => c.id != null)
-        .map((c) => c.id!)
-        .toList();
+    try {
+      // 1. Identificar IDs que ainda existem na nova lista
+      final idsExistentes = custos
+          .where((c) => c.id != null)
+          .map((c) => c.id!)
+          .toList();
 
-    // 2. Apagar do banco os custos desta empresa que foram removidos pelo usuário na tela
-    if (idsExistentes.isNotEmpty) {
-      // UUIDs precisam de aspas no filtro not.in do PostgREST
-      final idsFormatados = idsExistentes.map((id) => '"$id"').join(',');
-      await supabase
-          .from('custos_operacionais')
-          .delete()
-          .eq('empresa_id', _empresaId)
-          .filter('id', 'not.in', '($idsFormatados)');
-    } else {
-      // Se nenhum item da lista possui ID antigo, limpa todos os custos anteriores desta empresa
-      await supabase.from('custos_operacionais').delete().eq('empresa_id', _empresaId);
-    }
+      // 2. Apagar do banco os custos desta empresa que foram removidos pelo usuário na tela
+      if (idsExistentes.isNotEmpty) {
+        // UUIDs precisam de aspas no filtro not.in do PostgREST
+        final idsFormatados = idsExistentes.map((id) => '"$id"').join(',');
+        await supabase
+            .from('custos_operacionais')
+            .delete()
+            .eq('empresa_id', _empresaId)
+            .filter('id', 'not.in', '($idsFormatados)');
+      } else {
+        // Se nenhum item da lista possui ID antigo, limpa todos os custos anteriores desta empresa
+        await supabase.from('custos_operacionais').delete().eq('empresa_id', _empresaId);
+      }
 
-    // 3. Separar itens para ATUALIZAR vs itens para INSERIR
-    final paraAtualizar = custos.where((c) => c.id != null).toList();
-    final paraInserir = custos.where((c) => c.id == null).toList();
+      // 3. Separar itens para ATUALIZAR vs itens para INSERIR
+      final paraAtualizar = custos.where((c) => c.id != null).toList();
+      final paraInserir = custos.where((c) => c.id == null).toList();
 
-    if (paraAtualizar.isNotEmpty) {
-      final dataUpdate = paraAtualizar.map((c) => <String, dynamic>{
-        'id': c.id,
-        'nome': c.nome,
-        'valor': c.valor,
-        'empresa_id': _empresaId, // 🔒 Multi-tenant
-      }).toList();
-      await supabase.from('custos_operacionais').upsert(dataUpdate);
-    }
+      if (paraAtualizar.isNotEmpty) {
+        // Como o ID já existe na lista "paraAtualizar", fazemos apenas um UPDATE para garantir que
+        // não chame 'upsert' que pode ter problemas com unique constraints
+        await Future.wait(paraAtualizar.map((c) => 
+          supabase
+            .from('custos_operacionais')
+            .update({
+              'nome': c.nome,
+              'valor': c.valor,
+            })
+            .eq('id', c.id!)
+            .eq('empresa_id', _empresaId)
+        ));
+      }
 
-    if (paraInserir.isNotEmpty) {
-      final dataInsert = paraInserir.map((c) => <String, dynamic>{
-        'nome': c.nome,
-        'valor': c.valor,
-        'empresa_id': _empresaId, // 🔒 Multi-tenant
-      }).toList();
-      await supabase.from('custos_operacionais').insert(dataInsert);
+      if (paraInserir.isNotEmpty) {
+        final dataInsert = paraInserir.map((c) => <String, dynamic>{
+          'nome': c.nome,
+          'valor': c.valor,
+          'empresa_id': _empresaId, // 🔒 Multi-tenant
+        }).toList();
+        await supabase.from('custos_operacionais').insert(dataInsert);
+      }
+    } catch (e) {
+      print("Erro ao substituir custos operacionais: $e");
     }
   }
 
@@ -291,20 +327,28 @@ class SupabaseHelper {
 
   /// ✅ Marcar alerta individual como lido
   static Future<void> marcarAlertaLido(int alertaId) async {
-    await supabase
-        .from('alertas_sistema')
-        .update({'lido': true})
-        .eq('id', alertaId)
-        .eq('empresa_id', _empresaId);
+    try {
+      await supabase
+          .from('alertas_sistema')
+          .update({'lido': true})
+          .eq('id', alertaId)
+          .eq('empresa_id', _empresaId);
+    } catch (e) {
+      print("Erro ao marcar alerta como lido: $e");
+    }
   }
 
   /// ✅ Marcar TODOS os alertas como lidos
   static Future<void> marcarTodosAlertasLidos() async {
-    await supabase
-        .from('alertas_sistema')
-        .update({'lido': true})
-        .eq('empresa_id', _empresaId)
-        .eq('lido', false);
+    try {
+      await supabase
+          .from('alertas_sistema')
+          .update({'lido': true})
+          .eq('empresa_id', _empresaId)
+          .eq('lido', false);
+    } catch (e) {
+      print("Erro ao marcar todos os alertas como lidos: $e");
+    }
   }
 
   // ==================== KPIs (DASHBOARD) ====================
@@ -376,12 +420,16 @@ class SupabaseHelper {
     String tipo = 'SOB_DEMANDA',
     Map<String, dynamic>? metricas,
   }) async {
-    await supabase.from('relatorios_ia').insert({
-      'tipo': tipo,
-      'conteudo_markdown': conteudo,
-      'metricas': metricas,
-      'empresa_id': _empresaId,
-    });
+    try {
+      await supabase.from('relatorios_ia').insert({
+        'tipo': tipo,
+        'conteudo_markdown': conteudo,
+        'metricas': metricas,
+        'empresa_id': _empresaId,
+      });
+    } catch (e) {
+      print("Erro ao salvar relatorio IA: $e");
+    }
   }
 
   /// 📋 Buscar relatórios IA (mais recentes primeiro)

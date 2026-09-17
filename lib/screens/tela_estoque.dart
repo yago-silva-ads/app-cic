@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import '../services/app_state.dart';
 import 'package:flutter/material.dart';
 import '../models/produto.dart';
 import '../models/aquisicao.dart';
@@ -8,11 +10,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'tela_alertas.dart';
 import 'tela_suporte.dart';
 import '../widgets/app_drawer.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:excel/excel.dart' as excel_pkg;
+import 'package:file_saver/file_saver.dart';
+import 'dart:typed_data';
 
 class TelaEstoque extends StatefulWidget {
   final List<Produto>? estoque;
   final VoidCallback? onUpdate;
-  const TelaEstoque({super.key, this.estoque, this.onUpdate});
+  final bool isEmbedded;
+
+  const TelaEstoque({
+    super.key,
+    this.estoque,
+    this.onUpdate,
+    this.isEmbedded = false,
+  });
 
   @override
   State<TelaEstoque> createState() => _TelaEstoqueState();
@@ -92,8 +107,13 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
 
   Widget _buildAbaInventario() {
     return estoqueLocal.isEmpty
-        ? const Center(child: Text("Estoque vazio."))
+        ? const Center(child: Padding(
+            padding: EdgeInsets.all(32.0),
+            child: Text("Estoque vazio.", style: TextStyle(fontSize: 16)),
+          ))
         : ListView.builder(
+            shrinkWrap: widget.isEmbedded,
+            physics: widget.isEmbedded ? const NeverScrollableScrollPhysics() : null,
             itemCount: estoqueLocal.length,
             itemBuilder: (ctx, i) {
               final p = estoqueLocal[i];
@@ -124,7 +144,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                   child: Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(15),
-                      gradient: critico ? LinearGradient(colors: [Colors.red.shade50, Colors.white]) : null,
+                      color: critico ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3) : Theme.of(context).cardColor,
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -153,12 +173,12 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: isFabricado ? Colors.purple.shade100 : Colors.blue.shade100,
+                                  color: isFabricado ? Colors.purple.withValues(alpha: 0.2) : Colors.blue.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
                                   p.origem,
-                                  style: TextStyle(color: isFabricado ? Colors.purple.shade900 : Colors.blue.shade900, fontSize: 12, fontWeight: FontWeight.bold),
+                                  style: TextStyle(color: isFabricado ? Colors.purple : Colors.blue, fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                               ),
                             ],
@@ -189,7 +209,8 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                               if (diferenca <= 0) {
                                 validadeWidget = Row(
                                   children: [
-                                    const Text("❌ ", style: TextStyle(fontSize: 12)),
+                                    const Icon(Icons.cancel, color: Colors.red, size: 16),
+                                    const SizedBox(width: 4),
                                     Text(
                                       "PRODUTO VENCIDO ($dataFormatada)",
                                       style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 12),
@@ -199,7 +220,8 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                               } else if (diferenca >= 1 && diferenca <= 14) {
                                 validadeWidget = Row(
                                   children: [
-                                    const Text("⚠️ ", style: TextStyle(fontSize: 12)),
+                                    const Icon(Icons.warning, color: Colors.orange, size: 16),
+                                    const SizedBox(width: 4),
                                     Text(
                                       "Vence em $diferenca dias ($dataFormatada)",
                                       style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12),
@@ -386,7 +408,7 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
                         child: Container(
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(12),
-                            color: critico ? Colors.red.shade50 : Colors.white,
+                            color: critico ? Theme.of(context).colorScheme.errorContainer.withValues(alpha: 0.3) : Theme.of(context).cardColor,
                           ),
                           child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -807,70 +829,205 @@ class _TelaEstoqueState extends State<TelaEstoque> with TickerProviderStateMixin
     );
   }
 
+  Future<void> _exportarPDF() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text("Relatório de Estoque", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 20),
+              pw.TableHelper.fromTextArray(
+                context: context,
+                headers: ['Código', 'Produto', 'Qtd', 'Vendas', 'Custo', 'Venda', 'Origem'],
+                data: estoqueLocal.map((p) => [
+                  p.codigo,
+                  p.nome,
+                  p.quantidade.toString(),
+                  (vendadasPorProduto[p.codigo] ?? 0).toString(),
+                  "R\$ ${p.valorCompra.toStringAsFixed(2)}",
+                  "R\$ ${p.valorVenda.toStringAsFixed(2)}",
+                  p.origem
+                ]).toList(),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    Uint8List bytes = await pdf.save();
+    await FileSaver.instance.saveFile(
+      name: 'relatorio_estoque',
+      bytes: bytes,
+      fileExtension: 'pdf',
+      mimeType: MimeType.pdf,
+    );
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Relatório PDF exportado com sucesso!'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  Future<void> _exportarExcel() async {
+    var excel = excel_pkg.Excel.createExcel();
+    var sheet = excel['Estoque'];
+    
+    sheet.appendRow([
+      excel_pkg.TextCellValue('Código'),
+      excel_pkg.TextCellValue('Produto'),
+      excel_pkg.TextCellValue('Quantidade'),
+      excel_pkg.TextCellValue('Vendidas'),
+      excel_pkg.TextCellValue('Custo (R\$)'),
+      excel_pkg.TextCellValue('Preço de Venda (R\$)'),
+      excel_pkg.TextCellValue('Lucro Unitário (R\$)'),
+      excel_pkg.TextCellValue('Origem'),
+    ]);
+
+    for (var p in estoqueLocal) {
+      int vendidas = vendadasPorProduto[p.codigo] ?? 0;
+      double lucroUnid = p.valorVenda - p.valorCompra;
+      
+      sheet.appendRow([
+        excel_pkg.TextCellValue(p.codigo),
+        excel_pkg.TextCellValue(p.nome),
+        excel_pkg.IntCellValue(p.quantidade),
+        excel_pkg.IntCellValue(vendidas),
+        excel_pkg.DoubleCellValue(p.valorCompra),
+        excel_pkg.DoubleCellValue(p.valorVenda),
+        excel_pkg.DoubleCellValue(lucroUnid),
+        excel_pkg.TextCellValue(p.origem),
+      ]);
+    }
+
+    var fileBytes = excel.save();
+    
+    if (fileBytes != null) {
+      await FileSaver.instance.saveFile(
+        name: 'relatorio_estoque',
+        bytes: Uint8List.fromList(fileBytes),
+        fileExtension: 'xlsx',
+        mimeType: MimeType.microsoftExcel,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Planilha Excel exportada com sucesso!'), backgroundColor: Colors.green),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Estoque Atual"),
-        backgroundColor: Colors.blue.shade800,
-        foregroundColor: Colors.white,
-        actions: [
-          // Ícone de Alertas / Avisos com Badge
-          Stack(
-            alignment: Alignment.center,
+    if (widget.isEmbedded) {
+      return _buildAbaInventario();
+    }
+
+    return Column(
+      children: [
+        Container(
+          color: Theme.of(context).colorScheme.surface,
+          child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_active_outlined),
-                tooltip: 'Central de Alertas & Avisos',
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaAlertas())).then((_) => _carregarEstoque());
-                },
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  unselectedLabelColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                  indicatorColor: Theme.of(context).colorScheme.primary,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.inventory_2), text: "Inventário"),
+                    Tab(icon: Icon(Icons.sell), text: "Vendas"),
+                  ],
+                ),
               ),
-              if (alertasNaoLidos > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      '$alertasNaoLidos',
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      textAlign: TextAlign.center,
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.file_download),
+                tooltip: 'Exportar Relatórios',
+                onSelected: (value) {
+                  if (value == 'pdf') {
+                    _exportarPDF();
+                  } else if (value == 'excel') {
+                    _exportarExcel();
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'pdf',
+                    child: ListTile(
+                      leading: Icon(Icons.picture_as_pdf, color: Colors.red),
+                      title: Text('Exportar PDF'),
+
+                      contentPadding: EdgeInsets.zero,
                     ),
                   ),
-                ),
+                  const PopupMenuItem<String>(
+                    value: 'excel',
+                    child: ListTile(
+                      leading: Icon(Icons.table_chart, color: Colors.green),
+                      title: Text('Exportar Excel'),
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ),
+              // Ícone de Alertas / Avisos com Badge
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_active_outlined),
+                    tooltip: 'Central de Alertas & Avisos',
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaAlertas())).then((_) => _carregarEstoque());
+                    },
+                  ),
+                  if (alertasNaoLidos > 0)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                        child: Text(
+                          '$alertasNaoLidos',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              // Ícone de Ajuda e Suporte
+              IconButton(
+                icon: const Icon(Icons.support_agent),
+                tooltip: 'Fale com o Suporte',
+                onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaSuporte()));
+                },
+              ),
+              const SizedBox(width: 8),
             ],
           ),
-          // Ícone de Ajuda e Suporte
-          IconButton(
-            icon: const Icon(Icons.support_agent),
-            tooltip: 'Fale com o Suporte',
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const TelaSuporte()));
-            },
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          indicatorColor: Colors.white,
-          tabs: const [
-            Tab(icon: Icon(Icons.inventory_2), text: "Inventário"),
-            Tab(icon: Icon(Icons.sell), text: "Vendas"),
-          ],
         ),
-      ),
-      drawer: const AppDrawer(),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildAbaInventario(),
-          _buildAbaVendas(),
-        ],
-      ),
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              _buildAbaInventario(),
+              _buildAbaVendas(),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

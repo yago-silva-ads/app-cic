@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import '../services/app_state.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/produto.dart';
@@ -1018,6 +1019,12 @@ class _TelaDashboardState extends State<TelaDashboard> {
           title: const Text("Dashboard & IA"),
           backgroundColor: Colors.blue.shade800,
           foregroundColor: Colors.white,
+          leading: MediaQuery.of(context).size.width <= 800
+              ? IconButton(
+                  icon: const Icon(Icons.menu),
+                  onPressed: () => AppState.mainScaffoldKey.currentState?.openDrawer(),
+                )
+              : null,
           bottom: const TabBar(
             labelColor: Colors.white,
             unselectedLabelColor: Colors.white70,
@@ -1029,7 +1036,6 @@ class _TelaDashboardState extends State<TelaDashboard> {
             ],
           ),
         ),
-        drawer: const AppDrawer(),
         body: _isLoading 
             ? const Center(child: CircularProgressIndicator()) 
             : Column(

@@ -8,7 +8,8 @@ import '../services/ia_service.dart';
 
 class TelaChatIA extends StatefulWidget {
   final String diagnosticoInicial;
-  const TelaChatIA({super.key, required this.diagnosticoInicial});
+  final bool isEmbedded;
+  const TelaChatIA({super.key, required this.diagnosticoInicial, this.isEmbedded = false});
 
   @override
   State<TelaChatIA> createState() => _TelaChatIAState();
@@ -17,7 +18,13 @@ class TelaChatIA extends StatefulWidget {
 class _TelaChatIAState extends State<TelaChatIA> {
   List<types.Message> _messages = [];
   final _user = types.User(id: '82091008-a484-4a89-ae75-a22bf8d6f3ac');
-  final _ia = types.User(id: 'gemini-ia');
+  final _ia = types.User(
+    id: 'gemini-ia', 
+    firstName: 'Consultor', 
+    lastName: 'IA',
+  );
+
+  bool _isTyping = false;
 
   @override
   void initState() {
@@ -57,8 +64,16 @@ class _TelaChatIAState extends State<TelaChatIA> {
     final textMessage = types.TextMessage(author: _user, createdAt: DateTime.now().millisecondsSinceEpoch, id: Uuid().v4(), text: message.text);
     _adicionarMensagem(textMessage);
 
+    setState(() {
+      _isTyping = true;
+    });
+
     String historico = _messages.reversed.whereType<types.TextMessage>().map((m) => m.text).join("\n");
     String resposta = await IaService.continuarConversa(historico, message.text);
+
+    setState(() {
+      _isTyping = false;
+    });
 
     _adicionarMensagem(types.TextMessage(author: _ia, createdAt: DateTime.now().millisecondsSinceEpoch, id: Uuid().v4(), text: resposta));
   }
@@ -66,7 +81,7 @@ class _TelaChatIAState extends State<TelaChatIA> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: widget.isEmbedded ? null : AppBar(
         title: const Text("Consultor IA"),
         actions: [
           IconButton(
@@ -84,7 +99,14 @@ class _TelaChatIAState extends State<TelaChatIA> {
           )
         ],
       ),
-      body: Chat(messages: _messages, onSendPressed: _handleSendPressed, user: _user),
+      body: Chat(
+        messages: _messages, 
+        onSendPressed: _handleSendPressed, 
+        user: _user,
+        typingIndicatorOptions: TypingIndicatorOptions(
+          typingUsers: _isTyping ? [_ia] : [],
+        ),
+      ),
     );
   }
 }
