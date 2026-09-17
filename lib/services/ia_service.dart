@@ -139,41 +139,47 @@ class IaService {
   }
 
   /// Modelos atuais do Google Gemini (2026) - Fonte oficial: ai.google.dev
-  /// gemini-2.5-flash: rápido, 1M tokens, ideal para chat
-  /// gemini-2.5-pro: mais potente, 1M tokens, para análises complexas
+  /// Ordem de prioridade: mais rápido primeiro, depois mais potente como fallback
   static const List<String> _modelos = [
     'gemini-2.5-flash',
     'gemini-2.5-pro',
   ];
 
   /// Método robusto centralizado para consultar o Gemini.
-  /// Tenta múltiplos modelos e métodos de autenticação automaticamente.
+  /// Tenta múltiplos modelos via SDK primeiro, depois REST como fallback.
   static Future<String> _consultarGeminiRobusto(String prompt) async {
     if (_apiKey == 'COLE_SUA_CHAVE_GEMINI_AQUI' || _apiKey.isEmpty) {
-      return "⚠️ Chave da API não configurada. Abra o arquivo lib/secrets.dart e cole sua chave do Google AI Studio (formato AIzaSy...).";
+      return "Chave da API nao configurada. Abra lib/secrets.dart e cole sua chave.";
     }
 
-    // Detectar o tipo de credencial
-    final bool isApiKey = _apiKey.startsWith('AIzaSy');
-    final bool isOAuthToken = _apiKey.startsWith('AQ.') || _apiKey.startsWith('ya29.');
-
-    // --- PLANO A: SDK do google_generative_ai (funciona melhor fora da Web) ---
-    if (!kIsWeb) {
-      for (final modelo in _modelos) {
-        try {
-          final model = GenerativeModel(model: modelo, apiKey: _apiKey);
-          final response = await model.generateContent([Content.text(prompt)]);
-          if (response.text != null && response.text!.isNotEmpty) {
-            return response.text!;
-          }
-        } catch (e) {
-          print("SDK tentativa ($modelo): $e");
-          continue; // tenta o próximo modelo
+    // --- PLANO A: SDK do google_generative_ai (funciona com a chave AQ.Ab...) ---
+    for (final modelo in _modelos) {
+      try {
+        final model = GenerativeModel(model: modelo, apiKey: _apiKey);
+        final response = await model.generateContent([Content.text(prompt)]);
+        if (response.text != null && response.text!.isNotEmpty) {
+          return response.text!;
         }
+      } catch (e) {
+        print("SDK tentativa ($modelo): $e");
+        // Se deu 503, espera 3s e tenta o mesmo modelo de novo
+        if (e.toString().contains('503') || e.toString().contains('overloaded') || e.toString().contains('UNAVAILABLE')) {
+          try {
+            await Future.delayed(const Duration(seconds: 3));
+            final model = GenerativeModel(model: modelo, apiKey: _apiKey);
+            final response = await model.generateContent([Content.text(prompt)]);
+            if (response.text != null && response.text!.isNotEmpty) {
+              return response.text!;
+            }
+          } catch (eRetry) {
+            print("SDK retry ($modelo): $eRetry");
+          }
+        }
+        continue; // tenta o próximo modelo
       }
     }
 
-    // --- PLANO B: HTTP REST direto (funciona na Web e contorna CORS) ---
+    // --- PLANO B: HTTP REST direto (fallback se SDK falhar completamente) ---
     for (final modelo in _modelos) {
       try {
         final bodyJson = jsonEncode({
@@ -182,23 +188,21 @@ class IaService {
           ]
         });
 
-        http.Response resp;
+        // Tenta primeiro como API key normal, depois como Bearer
+        var url = Uri.parse(
+            'https://generativelanguage.googleapis.com/v1beta/models/$modelo:generateContent?key=$_apiKey');
+        var resp = await http.post(
+          url,
+          headers: {'Content-Type': 'application/json', 'x-goog-api-key': _apiKey},
+          body: bodyJson,
+        );
 
-        if (isApiKey) {
-          // Chave de API padrão (AIzaSy...) -> query param + header
-          final url = Uri.parse(
-              'https://generativelanguage.googleapis.com/v1beta/models/$modelo:generateContent?key=$_apiKey');
-          resp = await http.post(
-            url,
-            headers: {'Content-Type': 'application/json'},
-            body: bodyJson,
-          );
-        } else {
-          // Token OAuth/Bearer (AQ.Ab... ou ya29...) -> Authorization header
-          final url = Uri.parse(
+        // Se deu 401 com API key, tenta como Bearer
+        if (resp.statusCode == 401) {
+          final urlBearer = Uri.parse(
               'https://generativelanguage.googleapis.com/v1beta/models/$modelo:generateContent');
           resp = await http.post(
-            url,
+            urlBearer,
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $_apiKey',
@@ -207,19 +211,10 @@ class IaService {
           );
         }
 
-        // Retry automático para 503 (servidores sobrecarregados)
+        // Retry para 503
         if (resp.statusCode == 503) {
           await Future.delayed(const Duration(seconds: 3));
-          // Tenta de novo UMA vez
-          if (isApiKey) {
-            final url = Uri.parse(
-                'https://generativelanguage.googleapis.com/v1beta/models/$modelo:generateContent?key=$_apiKey');
-            resp = await http.post(url, headers: {'Content-Type': 'application/json'}, body: bodyJson);
-          } else {
-            final url = Uri.parse(
-                'https://generativelanguage.googleapis.com/v1beta/models/$modelo:generateContent');
-            resp = await http.post(url, headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $_apiKey'}, body: bodyJson);
-          }
+          resp = await http.post(url, headers: {'Content-Type': 'application/json', 'x-goog-api-key': _apiKey}, body: bodyJson);
         }
 
         if (resp.statusCode == 200) {
@@ -235,41 +230,23 @@ class IaService {
             }
           }
         } else if (resp.statusCode == 404) {
-          print("Modelo $modelo não encontrado (404), tentando próximo...");
-          continue; // tenta o próximo modelo
+          print("REST modelo $modelo nao encontrado (404), tentando proximo...");
+          continue;
         } else if (resp.statusCode == 429) {
-          return "⏳ Muitas consultas em pouco tempo. Aguarde 30 segundos e tente novamente.";
+          return "Muitas consultas em pouco tempo. Aguarde 30 segundos e tente novamente.";
         } else if (resp.statusCode == 503) {
-          print("Modelo $modelo indisponível (503), tentando próximo...");
-          continue; // tenta o próximo modelo
-        } else if (resp.statusCode == 401 || resp.statusCode == 403) {
-          // Se é token OAuth e deu 401, tenta com o outro formato antes de desistir
-          if (!isApiKey && !isOAuthToken) {
-            continue;
-          }
-          final errBody = resp.body;
-          if (errBody.contains('API_KEY_SERVICE_BLOCKED')) {
-            return "🔑 **Chave bloqueada pelo Google.**\n\nSua chave de API não tem permissão para usar o Gemini.\n\n**Como resolver:**\n1. Acesse aistudio.google.com/apikey\n2. Clique em 'Criar chave de API' -> 'Criar em novo projeto'\n3. Cole a nova chave (formato AIzaSy...) no arquivo lib/secrets.dart";
-          }
-          if (isOAuthToken) {
-            return "🔑 **Tipo de credencial incompatível.**\n\nSua chave atual (${_apiKey.substring(0, 5)}...) é um token OAuth/Service Account.\n\nO Gemini API precisa de uma **chave de API** (formato AIzaSy...).\n\n**Como gerar:**\n1. Acesse aistudio.google.com/apikey\n2. Clique em 'Criar chave de API'\n3. Cole no arquivo lib/secrets.dart";
-          }
-          return "🔑 **Credenciais recusadas (${resp.statusCode}).** Verifique sua chave no lib/secrets.dart.";
+          continue;
         } else {
-          print("Erro HTTP ($modelo) ${resp.statusCode}: ${resp.body}");
+          print("REST erro ($modelo) ${resp.statusCode}: ${resp.body}");
           continue;
         }
       } catch (e) {
-        print("Erro REST ($modelo): $e");
-        final errStr = e.toString();
-        if (errStr.contains('XMLHttpRequest') || kIsWeb) {
-          return "🌐 **Bloqueio do navegador (CORS).**\n\nNavegadores bloqueiam chamadas diretas à API do Google por segurança.\n\n**Soluções:**\n1. Teste pelo celular ou emulador (funciona 100%).\n2. Ou inicie o Chrome com --disable-web-security para testes locais.";
-        }
+        print("REST erro ($modelo): $e");
         continue;
       }
     }
 
-    return "❌ **IA indisponível no momento.**\n\nTodos os modelos retornaram erro. Verifique:\n1. Se sua chave no lib/secrets.dart é válida (formato AIzaSy...).\n2. Se seu Wi-Fi/Internet está funcionando.\n3. Se o Google AI Studio (aistudio.google.com) está acessível.";
+    return "IA indisponivel no momento. Verifique sua conexao com a internet e tente novamente.";
   }
 
   /// Gera relatório agendado (para uso com cron/Edge Function)
