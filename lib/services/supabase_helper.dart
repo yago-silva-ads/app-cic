@@ -1,3 +1,4 @@
+// ignore_for_file: avoid_print
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/produto.dart';
@@ -96,6 +97,18 @@ class SupabaseHelper {
       print("Produto inserido/atualizado com sucesso: ${p.nome}");
     } catch (e) {
       print("Erro no SupabaseHelper.insertProduto: $e");
+      rethrow;
+    }
+  }
+
+  /// Atualiza apenas a quantidade em estoque de um produto
+  static Future<void> atualizarEstoque(String codigo, int novaQuantidade) async {
+    try {
+      await supabase.from('produtos').update({
+        'quantidade': novaQuantidade,
+      }).eq('codigo', codigo).eq('empresa_id', _empresaId);
+    } catch (e) {
+      print("Erro ao atualizar estoque: $e");
       rethrow;
     }
   }

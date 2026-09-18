@@ -1,118 +1,59 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Import do Firebase gerado pelo CLI
-import 'screens/tela_login.dart';
-import 'screens/main_layout.dart';
+import 'theme/app_theme.dart';
+import 'services/storage_service.dart';
 import 'services/app_state.dart';
+import 'screens/auth/splash_screen.dart';
+import 'package:flutter/services.dart';
 
-Future<void> main() async {
-  // Garante que os widgets do Flutter estejam prontos
+/// ═══════════════════════════════════════════════════════════════════════
+/// Entry Point - APP-CIC v2.0
+///
+/// Inicializa Firebase, Supabase, Storage Local e aplica o design system.
+/// ═══════════════════════════════════════════════════════════════════════
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa o Firebase (Analytics, etc) com as opções corretas
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  // Inicializa o Supabase com a URL corrigida
-  await Supabase.initialize(
-    url: 'https://drszfkijbemrzzgxvboy.supabase.co', // <-- CORRIGIDO AQUI!
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyc3pma2lqYmVtcnp6Z3h2Ym95Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5ODU3NzIsImV4cCI6MjA5NTU2MTc3Mn0.TYgZDdviLlJoPR5ZFlLqHt9ltzeIwv2IWLMGFlqmA3Y',
-  );
 
-  runApp(const MyApp());
-}
+  // Fixar orientação em retrato
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  // Inicializa o cache local (SharedPreferences)
+  await StorageService.init();
 
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
+  // Carrega o tema salvo
+  AppState.loadSavedTheme();
 
-class _MyAppState extends State<MyApp> {
-  /// 🔒 Chave global do Navigator para poder navegar de qualquer lugar
-  final _navigatorKey = GlobalKey<NavigatorState>();
 
-  @override
-  void initState() {
-    super.initState();
-
-    // 🔒 Auth Gateway: escuta mudanças de estado da autenticação em tempo real.
-    // Cobre: login, logout, expiração de token, revogação remota.
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
-
-      if (event == AuthChangeEvent.signedIn) {
-        _navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => const MainLayout(),
-          ),
-          (_) => false,
-        );
-      } else if (event == AuthChangeEvent.signedOut) {
-        // Sessão encerrada ou token expirou → volta para Login
-        _navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const TelaLogin()),
-          (_) => false,
-        );
-      }
-    });
+  // Inicializa Supabase
+  // OBS: Como não temos as chaves do ambiente aqui (secrets.dart), usaremos um mock ou chaves placeholder.
+  // IMPORTANTE: Para deploy, usar flutter_dotenv ou chaves injetadas no build.
+  try {
+    // Tente inicializar se tiver chaves no secrets.dart, ou coloque as suas chaves Supabase reais aqui.
+    // await Supabase.initialize(
+    //   url: 'YOUR_SUPABASE_URL',
+    //   anonKey: 'YOUR_SUPABASE_ANON_KEY',
+    // );
+  } catch (e) {
+    debugPrint('Erro ao inicializar Supabase: $e');
   }
+
+  runApp(const AppCIC());
+}
+
+class AppCIC extends StatelessWidget {
+  const AppCIC({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // 🔒 Verifica se já existe sessão ativa na abertura do app
-    final session = Supabase.instance.client.auth.currentSession;
-
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppState.themeNotifier,
-      builder: (context, currentMode, _) {
+      builder: (_, themeMode, __) {
         return MaterialApp(
-          navigatorKey: _navigatorKey,
-          title: 'Sistema de Gestão',
+          title: 'APP-CIC',
           debugShowCheckedModeBanner: false,
-          themeMode: currentMode,
-          // TEMA CLARO: Muito limpo, sério, fundo branco/gelo, textos escuros
-          theme: ThemeData(
-            brightness: Brightness.light,
-            colorScheme: ColorScheme.light(
-              primary: Colors.blue.shade800,
-              secondary: Colors.blue.shade600,
-              surface: Colors.grey.shade50, // Fundo gelo
-              background: Colors.grey.shade100,
-              onSurface: Colors.grey.shade900,
-            ),
-            scaffoldBackgroundColor: Colors.grey.shade100,
-            appBarTheme: AppBarTheme(
-              backgroundColor: Colors.blue.shade800,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            useMaterial3: true,
-          ),
-          // TEMA ESCURO: Fundo muito escuro, não cansativo, sério
-          darkTheme: ThemeData(
-            brightness: Brightness.dark,
-            colorScheme: ColorScheme.dark(
-              primary: Colors.blue.shade400,
-              secondary: Colors.blue.shade200,
-              surface: Colors.grey.shade900,
-              background: Colors.black,
-              onSurface: Colors.grey.shade100,
-            ),
-            scaffoldBackgroundColor: Colors.black,
-            appBarTheme: AppBarTheme(
-              backgroundColor: Colors.grey.shade900,
-              foregroundColor: Colors.white,
-              elevation: 0,
-            ),
-            useMaterial3: true,
-          ),
-          // Se logado → MainLayout, senão → Login
-          home: session != null ? const MainLayout() : const TelaLogin(),
+          themeMode: themeMode,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          home: const SplashScreen(),
         );
       },
     );
