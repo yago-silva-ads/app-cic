@@ -1,0 +1,47 @@
+{
+  "descricao": "Fixture obrigatória do upgrade: faturamento 700/100/150/50/0 → 700 A 70%, 150 A 85%, 100 B 95%, 50 C 100%, 0 C 100%. Produto de 700 com estoque 5 gera alerta; o de 150 com 6 não.",
+  "relogioUtc": "2026-10-11T15:00:00.000Z",
+  "fuso": "America/Sao_Paulo",
+  "periodo": "hoje",
+  "estoque": {
+    "versao": "snap-001",
+    "atualizadoEm": "2026-10-11T14:59:00.000Z",
+    "produtos": [
+      {"id": "p-700", "nome": "Café 500g", "codigoBarras": "0789100000017", "precoVendaAtualCentavos": 10000, "custoAtualCentavos": 6000},
+      {"id": "p-100", "nome": "Açúcar 1kg", "codigoBarras": "0789100000024", "precoVendaAtualCentavos": 5000, "custoAtualCentavos": 3000},
+      {"id": "p-150", "nome": "Leite 1L", "codigoBarras": "0789100000031", "precoVendaAtualCentavos": 5000, "custoAtualCentavos": 3500},
+      {"id": "p-050", "nome": "Sal 1kg", "codigoBarras": "0789100000048", "precoVendaAtualCentavos": 5000, "custoAtualCentavos": 2000},
+      {"id": "p-000", "nome": "Fósforo", "codigoBarras": "0789100000055", "precoVendaAtualCentavos": 500, "custoAtualCentavos": 200}
+    ],
+    "lotes": [
+      {"id": "l-700", "produtoId": "p-700", "quantidadeFisica": 5},
+      {"id": "l-100", "produtoId": "p-100", "quantidadeFisica": 20},
+      {"id": "l-150", "produtoId": "p-150", "quantidadeFisica": 6},
+      {"id": "l-050", "produtoId": "p-050", "quantidadeFisica": 9},
+      {"id": "l-000", "produtoId": "p-000", "quantidadeFisica": 40}
+    ]
+  },
+  "eventos": [
+    {"tipo": "venda", "id": "v-1", "instante": "2026-10-11T13:00:00.000Z", "itens": [
+      {"itemId": "1", "produtoId": "p-700", "quantidade": 7, "precoUnitarioCentavos": 10000, "custoUnitarioHistoricoCentavos": 6000},
+      {"itemId": "2", "produtoId": "p-150", "quantidade": 3, "precoUnitarioCentavos": 5000, "custoUnitarioHistoricoCentavos": 3500}
+    ]},
+    {"tipo": "venda", "id": "v-2", "instante": "2026-10-11T14:00:00.000Z", "itens": [
+      {"itemId": "1", "produtoId": "p-100", "quantidade": 2, "precoUnitarioCentavos": 5000, "custoUnitarioHistoricoCentavos": 3000},
+      {"itemId": "2", "produtoId": "p-050", "quantidade": 1, "precoUnitarioCentavos": 5000, "custoUnitarioHistoricoCentavos": 2000}
+    ]}
+  ],
+  "esperado": {
+    "valorLiquidoTotalCentavos": 100000,
+    "totalPositivoCentavos": 100000,
+    "itens": [
+      {"produtoId": "p-700", "quantidade": 7, "valorBaseCentavos": 70000, "acumuladoDepoisCentavos": 70000, "classe": "A", "lucroBrutoCentavos": 28000},
+      {"produtoId": "p-150", "quantidade": 3, "valorBaseCentavos": 15000, "acumuladoDepoisCentavos": 85000, "classe": "A", "lucroBrutoCentavos": 4500},
+      {"produtoId": "p-100", "quantidade": 2, "valorBaseCentavos": 10000, "acumuladoDepoisCentavos": 95000, "classe": "B", "lucroBrutoCentavos": 4000},
+      {"produtoId": "p-050", "quantidade": 1, "valorBaseCentavos": 5000, "acumuladoDepoisCentavos": 100000, "classe": "C", "lucroBrutoCentavos": 3000},
+      {"produtoId": "p-000", "quantidade": 0, "valorBaseCentavos": 0, "acumuladoDepoisCentavos": 100000, "classe": "C", "lucroBrutoCentavos": 0}
+    ],
+    "alertas": ["ruptura:p-700:hoje"],
+    "problemas": []
+  }
+}

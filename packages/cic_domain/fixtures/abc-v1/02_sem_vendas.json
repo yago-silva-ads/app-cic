@@ -1,0 +1,29 @@
+{
+  "descricao": "Sem vendas no período: realizado zero e todos C. Não troca para o potencial do estoque.",
+  "relogioUtc": "2026-10-11T15:00:00.000Z",
+  "fuso": "America/Sao_Paulo",
+  "periodo": "hoje",
+  "estoque": {
+    "versao": "snap-002",
+    "atualizadoEm": "2026-10-11T14:00:00.000Z",
+    "produtos": [
+      {"id": "p-a", "nome": "Produto A", "precoVendaAtualCentavos": 1000, "custoAtualCentavos": 500},
+      {"id": "p-b", "nome": "Produto B", "precoVendaAtualCentavos": 2000, "custoAtualCentavos": 900}
+    ],
+    "lotes": [
+      {"id": "l-a", "produtoId": "p-a", "quantidadeFisica": 3},
+      {"id": "l-b", "produtoId": "p-b", "quantidadeFisica": 1}
+    ]
+  },
+  "eventos": [],
+  "esperado": {
+    "valorLiquidoTotalCentavos": 0,
+    "totalPositivoCentavos": 0,
+    "itens": [
+      {"produtoId": "p-a", "quantidade": 0, "valorBaseCentavos": 0, "acumuladoDepoisCentavos": 0, "classe": "C", "lucroBrutoCentavos": 0},
+      {"produtoId": "p-b", "quantidade": 0, "valorBaseCentavos": 0, "acumuladoDepoisCentavos": 0, "classe": "C", "lucroBrutoCentavos": 0}
+    ],
+    "alertas": [],
+    "problemas": []
+  }
+}

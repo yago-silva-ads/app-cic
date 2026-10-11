@@ -1,0 +1,51 @@
+{
+  "descricao": "Venda + baixa vinculada contam uma vez; saída comercial independente conta; perda e sangria não são receita; venda cancelada não fatura; devolução parcial estorna proporcional na data da devolução; devolução de venda cancelada não subtrai de novo; evento repetido conta uma vez; desconto de pedido rateado com soma exata (100 → 67 + 33).",
+  "relogioUtc": "2026-10-11T15:00:00.000Z",
+  "fuso": "America/Sao_Paulo",
+  "periodo": "todos",
+  "estoque": {
+    "versao": "snap-003",
+    "atualizadoEm": "2026-10-11T14:00:00.000Z",
+    "produtos": [
+      {"id": "p-x", "nome": "Produto X", "precoVendaAtualCentavos": 1500, "custoAtualCentavos": 900},
+      {"id": "p-y", "nome": "Produto Y", "precoVendaAtualCentavos": 1000},
+      {"id": "p-z", "nome": "Produto Z", "precoVendaAtualCentavos": 500, "custoAtualCentavos": 200},
+      {"id": "p-w", "nome": "Produto W (arquivado)", "arquivado": true}
+    ],
+    "lotes": [
+      {"id": "l-x", "produtoId": "p-x", "quantidadeFisica": 10},
+      {"id": "l-y", "produtoId": "p-y", "quantidadeFisica": 2}
+    ]
+  },
+  "eventos": [
+    {"tipo": "venda", "id": "v1", "instante": "2026-10-10T13:00:00.000Z", "descontoPedidoCentavos": 100, "itens": [
+      {"itemId": "i1", "produtoId": "p-x", "quantidade": 2, "precoUnitarioCentavos": 1000, "custoUnitarioHistoricoCentavos": 400},
+      {"itemId": "i2", "produtoId": "p-y", "quantidade": 1, "precoUnitarioCentavos": 1000}
+    ]},
+    {"tipo": "movimentacao", "id": "m1", "instante": "2026-10-10T13:00:00.000Z", "produtoId": "p-x", "quantidade": 2, "motivo": "saidaComercial", "eventoOrigemId": "v1"},
+    {"tipo": "venda", "id": "v1", "instante": "2026-10-10T13:00:00.000Z", "descontoPedidoCentavos": 100, "itens": [
+      {"itemId": "i1", "produtoId": "p-x", "quantidade": 2, "precoUnitarioCentavos": 1000, "custoUnitarioHistoricoCentavos": 400},
+      {"itemId": "i2", "produtoId": "p-y", "quantidade": 1, "precoUnitarioCentavos": 1000}
+    ]},
+    {"tipo": "movimentacao", "id": "m2", "instante": "2026-10-10T14:00:00.000Z", "produtoId": "p-z", "quantidade": 3, "motivo": "saidaComercial", "precoUnitarioHistoricoCentavos": 500, "custoUnitarioHistoricoCentavos": 200},
+    {"tipo": "movimentacao", "id": "m3", "instante": "2026-10-10T15:00:00.000Z", "produtoId": "p-x", "quantidade": 1, "motivo": "perda"},
+    {"tipo": "caixa", "id": "c1", "instante": "2026-10-10T16:00:00.000Z", "tipoCaixa": "sangria", "valorCentavos": 5000},
+    {"tipo": "venda", "id": "v2", "instante": "2026-10-10T17:00:00.000Z", "status": "cancelada", "itens": [
+      {"itemId": "i1", "produtoId": "p-y", "quantidade": 5, "precoUnitarioCentavos": 1000, "custoUnitarioHistoricoCentavos": 600}
+    ]},
+    {"tipo": "devolucao", "id": "d1", "instante": "2026-10-11T10:00:00.000Z", "vendaId": "v1", "itemId": "i1", "quantidade": 1},
+    {"tipo": "devolucao", "id": "d2", "instante": "2026-10-11T11:00:00.000Z", "vendaId": "v2", "itemId": "i1", "quantidade": 5},
+    {"tipo": "movimentacao", "id": "m4", "instante": "2026-10-11T12:00:00.000Z", "produtoId": "p-z", "quantidade": 1, "motivo": "saidaComercial"}
+  ],
+  "esperado": {
+    "valorLiquidoTotalCentavos": 3434,
+    "totalPositivoCentavos": 3434,
+    "itens": [
+      {"produtoId": "p-z", "quantidade": 4, "valorBaseCentavos": 1500, "acumuladoDepoisCentavos": 1500, "classe": "A", "lucroBrutoCentavos": null},
+      {"produtoId": "p-x", "quantidade": 1, "valorBaseCentavos": 967, "acumuladoDepoisCentavos": 2467, "classe": "A", "lucroBrutoCentavos": 567},
+      {"produtoId": "p-y", "quantidade": 1, "valorBaseCentavos": 967, "acumuladoDepoisCentavos": 3434, "classe": "A", "lucroBrutoCentavos": null}
+    ],
+    "alertas": ["ruptura:p-z:todos", "ruptura:p-y:todos"],
+    "problemas": ["custoHistoricoAusente", "custoHistoricoAusente", "devolucaoDeVendaCancelada", "eventoDuplicado", "precoHistoricoAusente"]
+  }
+}

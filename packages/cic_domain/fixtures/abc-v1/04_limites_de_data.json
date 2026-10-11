@@ -1,0 +1,28 @@
+{
+  "descricao": "seteDias = 7 datas civis no fuso da loja (05/10 00:00 BRT até agora). Inclui o primeiro milissegundo e o instante atual; exclui 1 ms antes e 1 ms no futuro. 02:30Z do dia 11 é 23:30 do dia 10 na loja.",
+  "relogioUtc": "2026-10-11T15:00:00.000Z",
+  "fuso": "America/Sao_Paulo",
+  "periodo": "seteDias",
+  "estoque": {
+    "versao": "snap-004",
+    "atualizadoEm": "2026-10-11T15:00:00.000Z",
+    "produtos": [{"id": "p-1", "nome": "Pão", "precoVendaAtualCentavos": 100, "custoAtualCentavos": 40}],
+    "lotes": [{"id": "l-1", "produtoId": "p-1", "quantidadeFisica": 50}]
+  },
+  "eventos": [
+    {"tipo": "venda", "id": "e1-inicio", "instante": "2026-10-05T03:00:00.000Z", "itens": [{"itemId": "1", "produtoId": "p-1", "quantidade": 1, "precoUnitarioCentavos": 100, "custoUnitarioHistoricoCentavos": 40}]},
+    {"tipo": "venda", "id": "e2-antes", "instante": "2026-10-05T02:59:59.999Z", "itens": [{"itemId": "1", "produtoId": "p-1", "quantidade": 1, "precoUnitarioCentavos": 100, "custoUnitarioHistoricoCentavos": 40}]},
+    {"tipo": "venda", "id": "e3-ontem-noite", "instante": "2026-10-11T02:30:00.000Z", "itens": [{"itemId": "1", "produtoId": "p-1", "quantidade": 1, "precoUnitarioCentavos": 100, "custoUnitarioHistoricoCentavos": 40}]},
+    {"tipo": "venda", "id": "e4-agora", "instante": "2026-10-11T15:00:00.000Z", "itens": [{"itemId": "1", "produtoId": "p-1", "quantidade": 1, "precoUnitarioCentavos": 100, "custoUnitarioHistoricoCentavos": 40}]},
+    {"tipo": "venda", "id": "e5-futuro", "instante": "2026-10-11T15:00:00.001Z", "itens": [{"itemId": "1", "produtoId": "p-1", "quantidade": 1, "precoUnitarioCentavos": 100, "custoUnitarioHistoricoCentavos": 40}]}
+  ],
+  "esperado": {
+    "valorLiquidoTotalCentavos": 300,
+    "totalPositivoCentavos": 300,
+    "itens": [
+      {"produtoId": "p-1", "quantidade": 3, "valorBaseCentavos": 300, "acumuladoDepoisCentavos": 300, "classe": "A", "lucroBrutoCentavos": 180}
+    ],
+    "alertas": [],
+    "problemas": []
+  }
+}
