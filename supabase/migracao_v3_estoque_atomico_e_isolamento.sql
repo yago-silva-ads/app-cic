@@ -105,6 +105,7 @@ ALTER TABLE public.historico_vendas ADD COLUMN IF NOT EXISTS desconto NUMERIC(5,
 
 ALTER TABLE public.custos_operacionais ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'FIXO';
 ALTER TABLE public.custos_operacionais ADD COLUMN IF NOT EXISTS categoria TEXT;
+ALTER TABLE public.custos_operacionais ADD COLUMN IF NOT EXISTS observacao TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_historico_vendas_venda_id ON public.historico_vendas (venda_id);
 CREATE INDEX IF NOT EXISTS idx_historico_vendas_empresa_data ON public.historico_vendas (empresa_id, data_venda);
@@ -393,8 +394,8 @@ BEGIN
         (v_uid, 'ENTRADA', 'COMPRA_FORNECEDOR', v_codigo, btrim(p_produto->>'nome'), v_qtd,
          COALESCE((p_produto->>'valor_compra')::NUMERIC, 0),
          round(v_qtd * COALESCE((p_produto->>'valor_compra')::NUMERIC, 0), 2),
-         COALESCE(NULLIF(p_produto->>'lote', ''), 'ENTRADA-MANUAL'),
-         'Cadastro inicial do produto');
+         COALESCE(NULLIF(p_produto->>'documento', ''), NULLIF(p_produto->>'lote', ''), 'ENTRADA-MANUAL'),
+         COALESCE(NULLIF(p_produto->>'observacao', ''), 'Cadastro inicial do produto'));
     END IF;
     RETURN jsonb_build_object('criado', true, 'quantidade', v_novo);
   END IF;
@@ -429,9 +430,10 @@ BEGIN
        v_codigo, COALESCE(NULLIF(btrim(p_produto->>'nome'), ''), v_prod.nome), abs(v_delta),
        COALESCE((p_produto->>'valor_compra')::NUMERIC, v_prod.valor_compra, 0),
        round(abs(v_delta) * COALESCE((p_produto->>'valor_compra')::NUMERIC, v_prod.valor_compra, 0), 2),
-       COALESCE(NULLIF(p_produto->>'lote', ''), 'ENTRADA-MANUAL'),
-       CASE WHEN p_modo_quantidade = 'definir' THEN 'Saldo redefinido no cadastro'
-            ELSE 'Entrada somada ao saldo existente' END);
+       COALESCE(NULLIF(p_produto->>'documento', ''), NULLIF(p_produto->>'lote', ''), 'ENTRADA-MANUAL'),
+       COALESCE(NULLIF(p_produto->>'observacao', ''),
+                CASE WHEN p_modo_quantidade = 'definir' THEN 'Saldo redefinido no cadastro'
+                     ELSE 'Entrada somada ao saldo existente' END));
   END IF;
 
   RETURN jsonb_build_object('criado', false, 'quantidade', v_novo);

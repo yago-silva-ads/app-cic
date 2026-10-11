@@ -91,9 +91,9 @@ class CicRepository {
 
   /// Cria ou atualiza o produto DESTA loja. [somar] = true soma a quantidade ao
   /// saldo existente; false redefine o saldo para o valor informado.
-  Future<int> salvarProduto(Produto p, {bool somar = true}) => _guard(() async {
+  Future<int> salvarProduto(Produto p, {bool somar = true, String? documento, String? observacao}) => _guard(() async {
     final r = await _db.rpc('salvar_produto', params: {
-      'p_produto': p.toRpc(),
+      'p_produto': p.toRpc(documento: documento, observacao: observacao),
       'p_modo_quantidade': somar ? 'somar' : 'definir',
     });
     return (r['quantidade'] as num).toInt();
@@ -132,6 +132,18 @@ class CicRepository {
     });
     return (r as num).toInt();
   }, contexto: 'ajustar o estoque');
+
+  /// Quais destes documentos (ex.: itens de NF-e) já têm movimentação.
+  /// Evita dar entrada duas vezes na mesma nota.
+  Future<Set<String>> documentosJaLancados(List<String> documentos) => _guard(() async {
+    if (documentos.isEmpty) return <String>{};
+    final rows = await _db
+        .from('movimentacoes_estoque')
+        .select('documento')
+        .eq('empresa_id', uid)
+        .inFilter('documento', documentos);
+    return {for (final r in rows) '${r['documento']}'};
+  }, contexto: 'conferir notas já importadas');
 
   // ===================== VENDAS =====================
 
@@ -191,6 +203,7 @@ class CicRepository {
       'valor': c.valor,
       'tipo': c.tipo == TipoCusto.fixo ? 'FIXO' : 'VARIAVEL',
       'categoria': c.categoria,
+      'observacao': c.observacao,
     };
     if (c.id == null) {
       await _db.from('custos_operacionais').insert(dados);
@@ -246,6 +259,10 @@ class CicRepository {
         .limit(limite);
     return List<Map<String, dynamic>>.from(rows);
   }, contexto: 'carregar os relatórios');
+
+  Future<void> excluirRelatorioIa(int id) => _guard(() async {
+    await _db.from('relatorios_ia').delete().eq('id', id).eq('empresa_id', uid);
+  }, contexto: 'excluir o relatório');
 
   // ===================== CONTA DO ESTABELECIMENTO =====================
 

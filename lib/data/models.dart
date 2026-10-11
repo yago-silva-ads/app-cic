@@ -64,7 +64,9 @@ class Produto {
   );
 
   /// Payload para `salvar_produto`. Nunca inclui `empresa_id`: a loja é a do JWT.
-  Map<String, dynamic> toRpc() => {
+  Map<String, dynamic> toRpc({String? documento, String? observacao}) => {
+    'documento': ?documento,
+    'observacao': ?observacao,
     'codigo': codigo,
     'nome': nome,
     'lote': lote,
@@ -91,13 +93,14 @@ class Produto {
 enum TipoCusto { fixo, variavel }
 
 class CustoOperacional {
-  CustoOperacional({this.id, required this.nome, required this.valor, this.tipo = TipoCusto.fixo, this.categoria});
+  CustoOperacional({this.id, required this.nome, required this.valor, this.tipo = TipoCusto.fixo, this.categoria, this.observacao});
 
   final String? id;
   String nome;
   double valor;
   TipoCusto tipo;
   String? categoria;
+  String? observacao;
 
   factory CustoOperacional.fromJson(Map<String, dynamic> j) => CustoOperacional(
     id: j['id']?.toString(),
@@ -105,6 +108,7 @@ class CustoOperacional {
     valor: _num(j['valor']),
     tipo: '${j['tipo'] ?? 'FIXO'}'.toUpperCase() == 'VARIAVEL' ? TipoCusto.variavel : TipoCusto.fixo,
     categoria: j['categoria']?.toString(),
+    observacao: j['observacao']?.toString(),
   );
 }
 

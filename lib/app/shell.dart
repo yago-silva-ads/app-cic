@@ -112,7 +112,7 @@ class _AppShellState extends State<AppShell> {
       case NavTab.pdv:
         return PdvScreen(estado: e, onAbrirScanner: _abrirScanner);
       case NavTab.suporte:
-        return const SuporteScreen();
+        return SuporteScreen(estado: e);
     }
   }
 
