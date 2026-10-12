@@ -73,9 +73,18 @@ BEGIN
 END $$;
 
 -- 1.4 Único por loja
-ALTER TABLE public.produtos DROP CONSTRAINT IF EXISTS produtos_empresa_codigo_key;
-ALTER TABLE public.produtos
-  ADD CONSTRAINT produtos_empresa_codigo_key UNIQUE (empresa_id, codigo);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+     WHERE c.conrelid = 'public.produtos'::regclass AND c.contype = 'u'
+       AND (SELECT array_agg(a.attname::text ORDER BY a.attname)
+              FROM unnest(c.conkey) k
+              JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k) = ARRAY['codigo', 'empresa_id']
+  ) THEN
+    ALTER TABLE public.produtos ADD CONSTRAINT produtos_empresa_codigo_key UNIQUE (empresa_id, codigo);
+  END IF;
+END $$;
 
 -- 1.5 FK composta. RESTRICT: apagar produto com vendas NÃO apaga o histórico
 -- (o app arquiva o produto em vez de excluir quando há vendas).
@@ -187,8 +196,9 @@ END $$;
 -- ╔══════════════════════════════════════════════════════════╗
 -- ║  PASSO 5: venda atômica (baixa + histórico + movimento)  ║
 -- ╚══════════════════════════════════════════════════════════╝
--- SECURITY INVOKER: roda com o JWT do lojista, então a RLS continua valendo
--- e `auth.uid()` é sempre a loja dele. O app não envia empresa_id.
+-- SECURITY DEFINER com search_path fixo: grava mesmo com as tabelas fechadas
+-- para escrita direta, mas SEMPRE só na loja de `auth.uid()` (o JWT de quem
+-- chamou). Toda leitura/escrita filtra por essa loja. O app não envia empresa_id.
 --
 -- p_itens: [{"codigo":"789...","quantidade":2,"valor_unitario":4.90}, ...]
 -- Erros (mensagem começa com um código estável que o app traduz):
@@ -202,7 +212,7 @@ CREATE OR REPLACE FUNCTION public.registrar_venda(
   p_desconto_pct    NUMERIC DEFAULT 0
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -289,7 +299,7 @@ CREATE OR REPLACE FUNCTION public.ajustar_estoque(
   p_valor_unitario NUMERIC DEFAULT NULL
 ) RETURNS INT
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -346,7 +356,7 @@ CREATE OR REPLACE FUNCTION public.salvar_produto(
   p_modo_quantidade  TEXT DEFAULT 'somar'
 ) RETURNS JSONB
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
@@ -470,6 +480,56 @@ SELECT a.empresa_id, 'ENTRADA', 'COMPRA_FORNECEDOR', a.produto_codigo,
  WHERE a.empresa_id IS NOT NULL AND a.quantidade > 0
    AND NOT EXISTS (SELECT 1 FROM public.movimentacoes_estoque m
                     WHERE m.empresa_id = a.empresa_id AND m.documento = 'LEGADO-AQ-' || a.id);
+
+
+-- ╔══════════════════════════════════════════════════════════╗
+-- ║  PASSO 7c: blindagem (escrita só pelas funções)           ║
+-- ╚══════════════════════════════════════════════════════════╝
+-- Vendas e movimentações ficam imutáveis: só entram pelas funções acima.
+-- Saldo de produto só muda por venda/entrada/ajuste (sempre registrado).
+
+-- Visitante sem login não tem nenhum acesso direto às tabelas da loja.
+REVOKE ALL ON public.produtos, public.historico_vendas, public.movimentacoes_estoque,
+              public.custos_operacionais, public.alertas_sistema, public.relatorios_ia,
+              public.contas_estabelecimento, public.sessoes_caixa FROM anon;
+REVOKE TRUNCATE ON public.produtos, public.historico_vendas, public.movimentacoes_estoque,
+                   public.custos_operacionais, public.alertas_sistema, public.relatorios_ia,
+                   public.contas_estabelecimento, public.sessoes_caixa FROM authenticated;
+
+-- historico_vendas: somente leitura da própria loja.
+DO $$
+DECLARE pol RECORD;
+BEGIN
+  FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'historico_vendas' LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.historico_vendas', pol.policyname);
+  END LOOP;
+END $$;
+ALTER TABLE public.historico_vendas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY vendas_select_own ON public.historico_vendas
+  FOR SELECT TO authenticated USING (empresa_id = auth.uid());
+REVOKE INSERT, UPDATE, DELETE ON public.historico_vendas FROM authenticated;
+
+-- movimentacoes_estoque: somente leitura (as funções gravam).
+DROP POLICY IF EXISTS mov_insert_own ON public.movimentacoes_estoque;
+REVOKE INSERT, UPDATE, DELETE ON public.movimentacoes_estoque FROM authenticated;
+
+-- produtos: ler, arquivar (coluna ativo) e apagar o que é seu; criar e mudar
+-- preço/saldo só por salvar_produto / ajustar_estoque / registrar_venda.
+DO $$
+DECLARE pol RECORD;
+BEGIN
+  FOR pol IN SELECT policyname FROM pg_policies WHERE schemaname = 'public' AND tablename = 'produtos' LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.produtos', pol.policyname);
+  END LOOP;
+END $$;
+CREATE POLICY produtos_select_own ON public.produtos
+  FOR SELECT TO authenticated USING (empresa_id = auth.uid());
+CREATE POLICY produtos_update_own ON public.produtos
+  FOR UPDATE TO authenticated USING (empresa_id = auth.uid()) WITH CHECK (empresa_id = auth.uid());
+CREATE POLICY produtos_delete_own ON public.produtos
+  FOR DELETE TO authenticated USING (empresa_id = auth.uid());
+REVOKE INSERT, UPDATE ON public.produtos FROM authenticated;
+GRANT UPDATE (ativo) ON public.produtos TO authenticated;
 
 
 -- ╔══════════════════════════════════════════════════════════╗

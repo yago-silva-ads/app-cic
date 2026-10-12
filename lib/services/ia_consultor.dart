@@ -54,6 +54,39 @@ class IaConsultor {
     );
   }
 
+  static const _vazias = {
+    'tem', 'tenho', 'temos', 'quanto', 'quantos', 'quanta', 'quantas', 'estoque', 'produto', 'produtos', 'unidade',
+    'unidades', 'ainda', 'agora', 'loja', 'meu', 'minha', 'meus', 'minhas', 'qual', 'quais', 'que', 'saldo', 'resta',
+    'sobrou', 'sobra', 'para', 'pra', 'voce', 'esta', 'estao', 'aqui', 'algum', 'alguma', 'mais', 'menos', 'com',
+    'sem', 'dos', 'das', 'nos', 'nas', 'uma', 'uns', 'umas', 'del', 'por', 'vende', 'vendo', 'vendemos', 'preco',
+  };
+
+  List<String> _termos(String t) => [
+    for (final w in t.replaceAll(RegExp(r'[^a-z0-9 ]'), ' ').split(' '))
+      if (w.length >= 3 && !_vazias.contains(w)) w,
+  ];
+
+  /// Produtos cujo nome ou código contém os termos significativos da pergunta.
+  List<Produto> _buscarProdutos(String t) {
+    final termos = _termos(t);
+    if (termos.isEmpty) return const [];
+    var melhor = 0;
+    final pontuados = <(Produto, int)>[];
+    for (final p in estado.estoque) {
+      final nome = _norm('${p.nome} ${p.categoria}');
+      var pts = 0;
+      for (final w in termos) {
+        if (p.codigo == w) pts += 10;
+        if (RegExp(r'\b' + RegExp.escape(w)).hasMatch(nome)) pts += 2;
+      }
+      if (pts > 0) pontuados.add((p, pts));
+      if (pts > melhor) melhor = pts;
+    }
+    // Exige que a pergunta cite o produto de forma clara (nome ou código).
+    if (melhor < 2) return const [];
+    return [for (final e in pontuados) if (e.$2 == melhor) e.$1];
+  }
+
   /// Resposta calculada (sem IA) ou null se a pergunta é aberta.
   dom.RespostaConsultor? _objetiva(String pergunta) {
     final t = _norm(pergunta);
@@ -75,6 +108,29 @@ class IaConsultor {
       ];
       return _local('Produtos com validade crítica (${lista.length}):\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: [for (final p in lista.take(8)) p.codigo]);
     }
+
+    if (RegExp(r'em falta|faltando|zerad|sem estoque|esgotad|acabou|nao tem mais|o que nao tenho|o que (nao|não) tem').hasMatch(t)) {
+      final zerados = estado.estoque.where((p) => p.quantidade <= 0).toList();
+      if (zerados.isEmpty) return _local('Nenhum produto está zerado: todos os ${estado.estoque.length} cadastrados têm saldo.');
+      final linhas = [for (final p in zerados.take(10)) '- ${p.nome} (código ${p.codigo}): 0 un.'];
+      final resto = zerados.length > 10 ? '\nE mais ${zerados.length - 10}.' : '';
+      return _local('Produtos sem estoque (${zerados.length}):\n${linhas.join('\n')}$resto',
+          tipo: dom.TipoResposta.lista, fontes: [for (final p in zerados.take(10)) p.codigo]);
+    }
+
+    final achados = _buscarProdutos(t);
+    if (achados.isNotEmpty) {
+      final linhas = [
+        for (final p in achados.take(6))
+          '- ${p.nome}: ${p.quantidade <= 0 ? 'SEM ESTOQUE (0 un)' : '${p.quantidade} un em estoque'}, vende a ${brl(p.valorVenda)}'
+              '${p.dataValidade != null ? ', validade ${dataCurta(p.dataValidade)}' : ''}.',
+      ];
+      final cab = achados.length == 1
+          ? (achados.first.quantidade > 0 ? 'Sim, você tem:' : 'Você tem o produto cadastrado, mas está sem estoque:')
+          : 'Encontrei ${achados.length} produtos:';
+      return _local('$cab\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: [for (final p in achados.take(6)) p.codigo]);
+    }
+
 
     if (RegExp(r'acabando|acaba|estoque baixo|baixo estoque|falta|ruptura|repor|reposicao|esgotando|zerad').hasMatch(t)) {
       final baixos = estado.estoque.where((p) => p.estoqueBaixo).toList()..sort((a, b) => a.quantidade.compareTo(b.quantidade));
@@ -122,6 +178,14 @@ class IaConsultor {
     if (RegExp(r'o que (eu )?tenho|quantos produtos|quantas unidades|meu estoque|tenho no estoque|estoque agora|em estoque').hasMatch(t)) {
       return _det.estoqueAtual(resumo);
     }
+    if (RegExp(r'\btem\b|quanto(s|as)? .*(tem|resta|sobr)|estoque de|saldo de').hasMatch(t) &&
+        !RegExp(r'o que (eu )?tenho|meu estoque|estoque agora|quantos produtos|quantas unidades').hasMatch(t)) {
+      final termo = _termos(t).join(' ');
+      if (termo.isNotEmpty) {
+        return _local('Não encontrei "$termo" no seu estoque. Se você vende esse produto, cadastre-o no Leitor GS1 para eu acompanhar.');
+      }
+    }
+
     return null;
   }
 

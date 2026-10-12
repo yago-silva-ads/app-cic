@@ -85,7 +85,7 @@ class CicRepository {
 
   Future<List<Produto>> produtos({bool incluirArquivados = false}) => _guard(() async {
     final q = _db.from('produtos').select().eq('empresa_id', uid);
-    final rows = await (incluirArquivados ? q : q.neq('ativo', false)).order('nome');
+    final rows = await (incluirArquivados ? q : q.or('ativo.is.null,ativo.eq.true')).order('nome');
     return [for (final r in rows) Produto.fromJson(r)];
   }, contexto: 'carregar o estoque');
 

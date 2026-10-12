@@ -164,6 +164,28 @@ void main() {
       expect(r.resposta, isNot(contains('R\$')));
     });
 
+    test('pergunta por produto específico responde o saldo real', () async {
+      final e = _estado()..estoque = [_p('789', 'Leite UHT Integral', 12, 3, 5), _p('790', 'Cerveja Lata', 0, 2, 4)];
+      final ia = IaConsultor(e);
+      final leite = await ia.perguntar('Tem leite?');
+      expect(leite!.resposta, contains('Sim, você tem'));
+      expect(leite.resposta, contains('12 un em estoque'));
+      final cerveja = await ia.perguntar('quanto tem de cerveja?');
+      expect(cerveja!.resposta, contains('SEM ESTOQUE'));
+      final nada = await ia.perguntar('tem picanha?');
+      expect(nada!.resposta, contains('Não encontrei'));
+      expect(nada.resposta, isNot(contains('Sim')));
+      final falta = await ia.perguntar('o que está em falta?');
+      expect(falta!.resposta, contains('Cerveja Lata'));
+      expect(falta.resposta, isNot(contains('Leite')));
+    });
+
+    test('perguntas gerais não viram busca de produto', () async {
+      final e = _estado()..estoque = [_p('1', 'Cola', 1, 1, 1.1)];
+      final r = await IaConsultor(e).perguntar('Quais produtos têm markup abaixo de 1,30x?');
+      expect(r!.resposta, contains('markup abaixo de 1,30x'));
+    });
+
     test('produtos acabando lista só o que está no mínimo', () async {
       final e = _estado()..estoque = [_p('1', 'Cola', 2, 1, 2), _p('2', 'Suco', 90, 1, 2)];
       final r = await IaConsultor(e).perguntar('quais produtos estão acabando?');
