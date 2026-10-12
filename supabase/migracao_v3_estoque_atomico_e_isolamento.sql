@@ -445,6 +445,34 @@ GRANT EXECUTE ON FUNCTION public.salvar_produto(JSONB, TEXT) TO authenticated;
 
 
 -- ╔══════════════════════════════════════════════════════════╗
+-- ║  PASSO 7b: trazer dados das tabelas antigas (idempotente) ║
+-- ╚══════════════════════════════════════════════════════════╝
+-- Despesas variáveis antigas passam a ser custos do tipo VARIAVEL.
+INSERT INTO public.custos_operacionais (empresa_id, nome, valor, tipo, categoria)
+SELECT d.empresa_id, d.nome, d.valor, 'VARIAVEL', 'Geral'
+  FROM public.despesas_variaveis d
+ WHERE d.empresa_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM public.custos_operacionais c
+                    WHERE c.empresa_id = d.empresa_id AND c.nome = d.nome
+                      AND c.valor = d.valor AND c.tipo = 'VARIAVEL');
+
+-- Aquisições antigas viram movimentações de entrada (só histórico; NÃO mexe no saldo).
+INSERT INTO public.movimentacoes_estoque
+  (empresa_id, tipo, motivo, produto_codigo, produto_nome, quantidade,
+   valor_unitario, valor_total, documento, observacao, criado_em)
+SELECT a.empresa_id, 'ENTRADA', 'COMPRA_FORNECEDOR', a.produto_codigo,
+       COALESCE(p.nome, a.produto_codigo), a.quantidade, COALESCE(a.valor_unitario, 0),
+       round(a.quantidade * COALESCE(a.valor_unitario, 0), 2),
+       'LEGADO-AQ-' || a.id, COALESCE(a.fornecedor, a.observacao, 'Importado do histórico antigo'),
+       COALESCE(a.criado_em, a.data_aquisicao::TIMESTAMPTZ, now())
+  FROM public.historico_aquisicoes a
+  LEFT JOIN public.produtos p ON p.empresa_id = a.empresa_id AND p.codigo = a.produto_codigo
+ WHERE a.empresa_id IS NOT NULL AND a.quantidade > 0
+   AND NOT EXISTS (SELECT 1 FROM public.movimentacoes_estoque m
+                    WHERE m.empresa_id = a.empresa_id AND m.documento = 'LEGADO-AQ-' || a.id);
+
+
+-- ╔══════════════════════════════════════════════════════════╗
 -- ║  PASSO 8: confirmação                                    ║
 -- ╚══════════════════════════════════════════════════════════╝
 SELECT 'Migração v3 aplicada: código único por loja, venda atômica e movimentações.' AS status;
