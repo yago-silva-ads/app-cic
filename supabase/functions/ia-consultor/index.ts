@@ -17,6 +17,10 @@ const MODELOS = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.
   (m, i, a): m is string => !!m && a.indexOf(m) === i,
 );
 const API_KEY = Deno.env.get('GEMINI_API_KEY');
+// Alternativa/reserva: DeepSeek (API compatível com OpenAI, cota alta e barata).
+// Secret opcional: DEEPSEEK_API_KEY. Recebe só números agregados, nunca dados pessoais.
+const DEEPSEEK_KEY = Deno.env.get('DEEPSEEK_API_KEY');
+const DEEPSEEK_MODELO = Deno.env.get('DEEPSEEK_MODEL') ?? 'deepseek-chat';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -84,7 +88,7 @@ Deno.serve(async (req) => {
   const atualizadoEm = String(entrada.atualizadoEm ?? '');
   if (!pergunta || !snapshotVersion || !atualizadoEm) return json(400, { erro: 'Campos obrigatórios ausentes' });
   // 501: falta configuração (não adianta o app tentar de novo).
-  if (!API_KEY) return json(501, { erro: 'IA não configurada no servidor' });
+  if (!API_KEY && !DEEPSEEK_KEY) return json(501, { erro: 'IA não configurada no servidor' });
 
   const contexto = JSON.stringify({
     periodo: entrada.periodo ?? null,
@@ -101,10 +105,11 @@ ${contexto}` }] }],
     generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: 'application/json' },
   });
 
-  // Orçamento total de 15 s (o app desiste em 18 s), dividido entre os modelos.
+  // Orçamento total de 15 s (o app desiste em 18 s), dividido entre os provedores.
   const limite = Date.now() + 15_000;
   let resp: Response | null = null;
-  for (const modelo of MODELOS) {
+  let textoIa: string | null = null;
+  for (const modelo of API_KEY ? MODELOS : []) {
     const restante = limite - Date.now();
     if (restante < 1_500) break;
     const controller = new AbortController();
@@ -113,28 +118,66 @@ ${contexto}` }] }],
       resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
         method: 'POST',
         signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY! },
         body: corpo,
       });
-    } catch (e) {
-      return json(e instanceof DOMException && e.name === 'AbortError' ? 504 : 502, { erro: 'Provedor de IA indisponível' });
+    } catch {
+      resp = null;
+      break; // Gemini fora/lento: tenta o DeepSeek, se houver
     } finally {
       clearTimeout(timer);
     }
     if (resp.status !== 404) break; // 404 = modelo aposentado: tenta o próximo
   }
-  if (!resp) return json(504, { erro: 'Provedor de IA demorou demais' });
+  if (resp?.ok) {
+    try {
+      const dados = await resp.json();
+      textoIa = dados?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+    } catch {
+      textoIa = null;
+    }
+  }
 
-  if (!resp.ok) {
+  // Reserva: DeepSeek, se o Gemini não respondeu (ou não está configurado).
+  if (textoIa == null && DEEPSEEK_KEY && limite - Date.now() > 1_500) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), limite - Date.now());
+    try {
+      resp = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DEEPSEEK_KEY}` },
+        body: JSON.stringify({
+          model: DEEPSEEK_MODELO,
+          temperature: 0.2,
+          max_tokens: 1200,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: SISTEMA },
+            { role: 'user', content: `PERGUNTA DO LOJISTA: ${pergunta}\n\nDADOS CALCULADOS (única fonte permitida):\n${contexto}` },
+          ],
+        }),
+      });
+      if (resp.ok) {
+        const dados = await resp.json();
+        textoIa = dados?.choices?.[0]?.message?.content ?? null;
+      }
+    } catch {
+      resp = null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  if (textoIa == null) {
+    if (!resp) return json(504, { erro: 'Provedor de IA demorou demais ou está fora do ar' });
     // Chave inválida/revogada (400/401/403) não se resolve tentando de novo.
     const status = resp.status === 429 ? 429 : resp.status >= 500 ? 503 : 501;
     return json(status, { erro: 'Provedor de IA recusou a chamada' });
   }
 
   try {
-    const dados = await resp.json();
-    const texto: string = dados?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const saida = JSON.parse(texto);
+    const saida = JSON.parse(textoIa);
     const metricas: Record<string, number> = {};
     for (const [k, v] of Object.entries((saida.metricas ?? {}) as Record<string, unknown>)) {
       if (typeof v === 'number' && Number.isFinite(v)) metricas[k] = v;
