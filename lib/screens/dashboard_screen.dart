@@ -65,7 +65,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _alertaPrejuizo(context, lucro, custosMensais),
         const SizedBox(height: 20),
       ],
-      CicGrid(children: [
+      CicGrid(minLargura: 215, children: [
         _Kpi(
           titulo: 'Custo do Estoque',
           icone: LucideIcons.boxes,
