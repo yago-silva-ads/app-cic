@@ -173,21 +173,43 @@ ThemeData construirTema(CicPalette p) {
   );
 }
 
-/// Tema escolhido, persistido no aparelho (só preferência visual).
+/// Tema e tamanho de letra escolhidos, persistidos no aparelho.
 class TemaController extends ChangeNotifier {
   static const _chave = 'app_cic_tema_v2';
+  static const _chaveLetra = 'app_cic_letra_v1';
+
+  /// Tamanhos de letra oferecidos (acessibilidade para quem enxerga pouco).
+  static const escalas = [1.0, 1.2, 1.4];
+  static const rotulosEscala = ['Normal', 'Grande', 'Muito grande'];
+
   bool _claro = false;
+  double _escala = 1.0;
   bool get claro => _claro;
+  double get escala => _escala;
+  String get rotuloEscala => rotulosEscala[escalas.indexOf(_escala).clamp(0, escalas.length - 1)];
   CicPalette get paleta => _claro ? CicPalette.claro : CicPalette.escuro;
 
   Future<void> carregar() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _claro = prefs.getString(_chave) == 'light';
+      final e = prefs.getDouble(_chaveLetra) ?? 1.0;
+      _escala = escalas.contains(e) ? e : 1.0;
     } catch (_) {
       _claro = false;
     }
     notifyListeners();
+  }
+
+  /// Alterna Normal → Grande → Muito grande → Normal.
+  Future<void> proximaEscala() async {
+    final i = escalas.indexOf(_escala);
+    _escala = escalas[(i + 1) % escalas.length];
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_chaveLetra, _escala);
+    } catch (_) {}
   }
 
   Future<void> alternar() async {

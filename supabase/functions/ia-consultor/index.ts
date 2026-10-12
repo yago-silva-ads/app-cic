@@ -12,7 +12,10 @@
 // O app valida a resposta (contrato ia-v1 + aterramento); aqui só limitamos
 // o que o modelo recebe e devolvemos o JSON no formato esperado.
 
-const MODEL = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
+// Modelos tentados em ordem; se o Google aposentar um (404), cai no próximo.
+const MODELOS = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash'].filter(
+  (m, i, a): m is string => !!m && a.indexOf(m) === i,
+);
 const API_KEY = Deno.env.get('GEMINI_API_KEY');
 
 const CORS = {
@@ -63,7 +66,6 @@ function usuarioDoJwt(req: Request): string {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
-  if (!API_KEY) return json(503, { erro: 'IA não configurada no servidor' });
 
   const espera = limitado(usuarioDoJwt(req));
   if (espera > 0) return json(429, { erro: 'Muitas perguntas seguidas' }, { 'Retry-After': String(espera) });
@@ -81,6 +83,8 @@ Deno.serve(async (req) => {
   const snapshotVersion = String(entrada.snapshotVersion ?? '');
   const atualizadoEm = String(entrada.atualizadoEm ?? '');
   if (!pergunta || !snapshotVersion || !atualizadoEm) return json(400, { erro: 'Campos obrigatórios ausentes' });
+  // 501: falta configuração (não adianta o app tentar de novo).
+  if (!API_KEY) return json(501, { erro: 'IA não configurada no servidor' });
 
   const contexto = JSON.stringify({
     periodo: entrada.periodo ?? null,
@@ -88,28 +92,42 @@ Deno.serve(async (req) => {
     qualidade: entrada.qualidade ?? {},
   });
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25_000);
-  let resp: Response;
-  try {
-    resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SISTEMA }] },
-        contents: [{ role: 'user', parts: [{ text: `PERGUNTA DO LOJISTA: ${pergunta}\n\nDADOS CALCULADOS (única fonte permitida):\n${contexto}` }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 700, responseMimeType: 'application/json' },
-      }),
-    });
-  } catch (e) {
-    return json(e instanceof DOMException && e.name === 'AbortError' ? 504 : 502, { erro: 'Provedor de IA indisponível' });
-  } finally {
-    clearTimeout(timer);
+  const corpo = JSON.stringify({
+    systemInstruction: { parts: [{ text: SISTEMA }] },
+    contents: [{ role: 'user', parts: [{ text: `PERGUNTA DO LOJISTA: ${pergunta}
+
+DADOS CALCULADOS (única fonte permitida):
+${contexto}` }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: 'application/json' },
+  });
+
+  // Orçamento total de 15 s (o app desiste em 18 s), dividido entre os modelos.
+  const limite = Date.now() + 15_000;
+  let resp: Response | null = null;
+  for (const modelo of MODELOS) {
+    const restante = limite - Date.now();
+    if (restante < 1_500) break;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), restante);
+    try {
+      resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY },
+        body: corpo,
+      });
+    } catch (e) {
+      return json(e instanceof DOMException && e.name === 'AbortError' ? 504 : 502, { erro: 'Provedor de IA indisponível' });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (resp.status !== 404) break; // 404 = modelo aposentado: tenta o próximo
   }
+  if (!resp) return json(504, { erro: 'Provedor de IA demorou demais' });
 
   if (!resp.ok) {
-    const status = resp.status === 429 ? 429 : resp.status >= 500 ? 503 : 502;
+    // Chave inválida/revogada (400/401/403) não se resolve tentando de novo.
+    const status = resp.status === 429 ? 429 : resp.status >= 500 ? 503 : 501;
     return json(status, { erro: 'Provedor de IA recusou a chamada' });
   }
 

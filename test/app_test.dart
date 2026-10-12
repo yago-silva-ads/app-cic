@@ -52,6 +52,15 @@ void main() {
     });
   });
 
+  group('reconhecimento GS1', () {
+    test('catálogo embutido reconhece sem internet e sem inventar custo', () async {
+      final r = await consultarGs1('7894900010015');
+      expect(r.encontrado, isTrue);
+      expect(r.nome, contains('Coca-Cola'));
+      expect(r.origem, 'Catálogo GS1 Brasil');
+    });
+  });
+
   group('formatação', () {
     test('lerDecimal aceita formatos brasileiros', () {
       expect(lerDecimal('12,50'), 12.5);
@@ -178,6 +187,18 @@ void main() {
       final falta = await ia.perguntar('o que está em falta?');
       expect(falta!.resposta, contains('Cerveja Lata'));
       expect(falta.resposta, isNot(contains('Leite')));
+    });
+
+    test('perguntas seguidas no mesmo chat: cada uma recebe a sua resposta', () async {
+      final e = _estado()..estoque = [_p('789', 'Leite UHT', 12, 3, 5), _p('790', 'Cerveja Lata', 0, 2, 4)];
+      final ia = IaConsultor(e);
+      final perguntas = ['Tem leite?', 'o que está em falta?', 'O que tenho no meu estoque agora?', 'tem cerveja?'];
+      for (final p in perguntas) {
+        final r = await ia.perguntar(p);
+        expect(r, isNotNull, reason: p);
+      }
+      expect((await ia.perguntar('tem cerveja?'))!.resposta, contains('SEM ESTOQUE'));
+      expect((await ia.perguntar('Tem leite?'))!.resposta, contains('12 un'));
     });
 
     test('perguntas gerais não viram busca de produto', () async {

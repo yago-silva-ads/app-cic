@@ -38,6 +38,15 @@ class CicApp extends StatelessWidget {
           GlobalWidgetsLocalizations.delegate,
           GlobalCupertinoLocalizations.delegate,
         ],
+        // Letra maior escolhida pelo usuário (soma-se à do próprio celular).
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          final sistema = mq.textScaler.scale(1);
+          return MediaQuery(
+            data: mq.copyWith(textScaler: TextScaler.linear((sistema * tema.escala).clamp(1.0, 2.0))),
+            child: child!,
+          );
+        },
         home: _Porteiro(tema: tema),
       ),
     );

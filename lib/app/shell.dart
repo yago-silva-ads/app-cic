@@ -176,6 +176,8 @@ class _AppShellState extends State<AppShell> {
               ],
             ),
           ),
+          // Celular: barra fixa com as 5 ações do dia a dia, botões grandes e com nome.
+          bottomNavigationBar: largo ? null : _BarraInferior(aba: _aba, alertas: e.alertasNaoLidos, onIr: _ir, onBipar: () => _abrirScanner()),
         );
       },
     );
@@ -312,6 +314,26 @@ class _Sidebar extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(child: Text('Tema: ${c.isLight ? 'Modo Claro' : 'Modo Escuro'}', style: TextStyle(color: c.textSoft, fontSize: 12))),
                         CicBadge('Trocar', tom: BadgeTom.ouro),
+                      ]),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Acessibilidade: aumentar a letra do app inteiro.
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: estado.tema.proximaEscala,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: c.isLight ? Colors.white : const Color(0xFF181818),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: c.inputBorder),
+                      ),
+                      child: Row(children: [
+                        Icon(LucideIcons.aLargeSmall, size: 16, color: c.gold),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Letra: ${estado.tema.rotuloEscala}', style: TextStyle(color: c.textSoft, fontSize: 12))),
+                        const CicBadge('Aumentar', tom: BadgeTom.ouro),
                       ]),
                     ),
                   ),
@@ -573,6 +595,87 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 8),
           caixa(LucideIcons.logOut, onSair, dica: 'Sair da conta'),
         ],
+      ),
+    );
+  }
+}
+
+// ============================ BARRA INFERIOR (celular) ============================
+
+/// Navegação pensada para quem não é técnico: poucos botões, ícone + nome,
+/// área de toque de 64 px e o "Bipar" grande no centro.
+class _BarraInferior extends StatelessWidget {
+  const _BarraInferior({required this.aba, required this.alertas, required this.onIr, required this.onBipar});
+  final NavTab aba;
+  final int alertas;
+  final void Function(NavTab, {String? codigo}) onIr;
+  final VoidCallback onBipar;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.c;
+    Widget item(NavTab t, IconData i, String rotulo) {
+      final ativo = aba == t;
+      return Expanded(
+        child: Semantics(
+          button: true,
+          selected: ativo,
+          label: rotulo,
+          child: InkWell(
+            onTap: () => onIr(t),
+            child: SizedBox(
+              height: 64,
+              child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Icon(i, size: 24, color: ativo ? c.gold : c.textMuted),
+                const SizedBox(height: 4),
+                Text(rotulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, fontWeight: ativo ? FontWeight.w800 : FontWeight.w600, color: ativo ? c.gold : c.textSoft)),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(color: c.sidebar, border: Border(top: BorderSide(color: c.cardBorder))),
+      child: SafeArea(
+        top: false,
+        child: Row(children: [
+          item(NavTab.dashboard, LucideIcons.house, 'Início'),
+          item(NavTab.pdv, LucideIcons.shoppingCart, 'Vender'),
+          Expanded(
+            child: Semantics(
+              button: true,
+              label: 'Bipar código de barras',
+              child: GestureDetector(
+                onTap: onBipar,
+                child: SizedBox(
+                  height: 64,
+                  child: Center(
+                    child: Container(
+                      width: 58,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: c.botao,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: c.botao.withValues(alpha: 0.35), blurRadius: 12)],
+                      ),
+                      child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Icon(LucideIcons.barcode, size: 22, color: Colors.black),
+                        Text('Bipar', style: TextStyle(color: Colors.black, fontSize: 11, fontWeight: FontWeight.w900)),
+                      ]),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          item(NavTab.estoque, LucideIcons.boxes, 'Estoque'),
+          item(NavTab.inteligencia, LucideIcons.sparkles, 'Assistente'),
+        ]),
       ),
     );
   }

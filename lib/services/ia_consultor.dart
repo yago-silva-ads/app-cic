@@ -231,7 +231,11 @@ class IaConsultor {
       abc: abc,
     );
 
-    final resposta = await const dom.ConsultorSeguro().responder(
+    // No máximo 2 tentativas de 18 s: se o Gemini falhar, a resposta
+    // calculada aparece logo, sem o lojista ficar esperando.
+    final resposta = await const dom.ConsultorSeguro(
+      politica: dom.PoliticaRetentativa(maxTentativas: 2, timeoutPorTentativa: Duration(seconds: 18)),
+    ).responder(
       requestId: 'req-$token',
       chamarIa: () => _chamarServidor(consulta),
       contexto: contexto,
