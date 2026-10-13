@@ -90,7 +90,6 @@
   function abrir() {
     return new Promise(function (resolve) {
       if (typeof ZXing === 'undefined') { resolve(null); return; }
-      var leitor = novoLeitor();
       var encerrado = false;
       var stream = null;
 
@@ -124,7 +123,6 @@
       function terminar(valor) {
         if (encerrado) return;
         encerrado = true;
-        try { leitor.reset(); } catch (e) {}
         try { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
         raiz.remove();
         resolve(valor);
@@ -168,10 +166,84 @@
         audio: false
       };
 
-      leitor.decodeFromConstraints(restricoes, video, function (resultado) {
-        if (resultado) aoLer(resultado.getText());
+      // Leitura ao vivo própria: o loop interno do ZXing 0.19 não decodifica
+      // vídeo de forma confiável. A cada ~120 ms copiamos a faixa da mira para
+      // um canvas e decodificamos direto (mesmo método que funciona na foto).
+      // Se o navegador tiver o leitor nativo (BarcodeDetector), ele vai primeiro.
+      var detectorNativo = null;
+      try {
+        if ('BarcodeDetector' in window) {
+          detectorNativo = new window.BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'qr_code', 'data_matrix'] });
+        }
+      } catch (e) { detectorNativo = null; }
+      var hintsVivo = new Map();
+      hintsVivo.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formatos());
+      hintsVivo.set(ZXing.DecodeHintType.TRY_HARDER, true);
+      var leitorVivo = new ZXing.MultiFormatReader();
+      leitorVivo.setHints(hintsVivo);
+      var tela = document.createElement('canvas');
+      var ctxTela = tela.getContext('2d', { willReadFrequently: true });
+      var volta = 0;
+
+      function decodificarQuadro() {
+        var vw = video.videoWidth, vh = video.videoHeight;
+        if (!vw || !vh) return null;
+        // Alterna: faixa central (código deitado), quadro inteiro (QR / código em pé).
+        var faixa = (volta++ % 3) !== 2;
+        var sx = 0, sy = faixa ? Math.round(vh * 0.25) : 0, sw = vw, sh = faixa ? Math.round(vh * 0.5) : vh;
+        var esc = Math.min(1, 1280 / sw);
+        var w = Math.round(sw * esc), h = Math.round(sh * esc);
+        // A fonte de luminância do ZXing 0.19 só lê códigos 1D com a imagem
+        // girada 90° (verificado em teste); tentamos girada e normal.
+        for (var giro = 0; giro < 2; giro++) {
+          if (giro === 0) {
+            tela.width = h; tela.height = w;
+            ctxTela.save(); ctxTela.translate(h, 0); ctxTela.rotate(Math.PI / 2);
+            ctxTela.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+            ctxTela.restore();
+          } else {
+            tela.width = w; tela.height = h;
+            ctxTela.drawImage(video, sx, sy, sw, sh, 0, 0, w, h);
+          }
+          var fonte = new ZXing.HTMLCanvasElementLuminanceSource(tela);
+          var bins = [new ZXing.HybridBinarizer(fonte), new ZXing.GlobalHistogramBinarizer(fonte)];
+          for (var k = 0; k < bins.length; k++) {
+            try {
+              var r = leitorVivo.decodeWithState(new ZXing.BinaryBitmap(bins[k]));
+              if (r && r.getText()) return r.getText();
+            } catch (e) { /* sem código neste quadro */ }
+          }
+        }
+        return null;
+      }
+
+      function laco() {
+        if (encerrado) return;
+        if (video.readyState >= 2) {
+          if (detectorNativo) {
+            detectorNativo.detect(video).then(function (cods) {
+              if (cods && cods.length) { aoLer(cods[0].rawValue); return; }
+              var t = decodificarQuadro();
+              if (t) aoLer(t);
+            }).catch(function () {
+              var t = decodificarQuadro();
+              if (t) aoLer(t);
+            }).then(function () { setTimeout(laco, 120); });
+            return;
+          }
+          var t = decodificarQuadro();
+          if (t) aoLer(t);
+        }
+        setTimeout(laco, 120);
+      }
+
+      navigator.mediaDevices.getUserMedia(restricoes).then(function (s) {
+        stream = s;
+        if (encerrado) { s.getTracks().forEach(function (t) { t.stop(); }); return; }
+        video.srcObject = s;
+        return video.play().catch(function () {}).then(function () { laco(); });
       }).then(function () {
-        stream = video.srcObject;
+        if (!stream) return;
         var trilha = stream && stream.getVideoTracks ? stream.getVideoTracks()[0] : null;
         var cap = trilha && trilha.getCapabilities ? trilha.getCapabilities() : {};
         // Foco contínuo, se o aparelho deixar.
