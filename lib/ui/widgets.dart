@@ -424,14 +424,16 @@ class CicGrid extends StatelessWidget {
 
 /// Página rolável padrão (permite puxar para atualizar).
 class CicPagina extends StatelessWidget {
-  const CicPagina({super.key, required this.children, this.padding});
+  const CicPagina({super.key, required this.children, this.padding, this.controller});
   final List<Widget> children;
   final EdgeInsetsGeometry? padding;
+  final ScrollController? controller;
 
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     return ListView(
+      controller: controller,
       physics: const AlwaysScrollableScrollPhysics(),
       padding: padding ?? EdgeInsets.fromLTRB(w >= 640 ? 24 : 12, 16, w >= 640 ? 24 : 12, 32),
       children: children,

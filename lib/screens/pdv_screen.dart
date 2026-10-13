@@ -70,6 +70,24 @@ class _PdvScreenState extends State<PdvScreen> {
   final _recebido = TextEditingController();
   final _nsu = TextEditingController();
   final _checkoutKey = GlobalKey();
+  final _rolagem = ScrollController();
+
+  /// Leva até o pagamento. A lista é preguiçosa: se o checkout ainda não foi
+  /// construído (lista longa), rola até o fim e depois ajusta a posição.
+  Future<void> _irParaPagamento() async {
+    if (!_rolagem.hasClients) return;
+    final ctx = _checkoutKey.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
+      return;
+    }
+    await _rolagem.animateTo(_rolagem.position.maxScrollExtent, duration: const Duration(milliseconds: 450), curve: Curves.easeOut);
+    if (!mounted) return;
+    final ctx2 = _checkoutKey.currentContext;
+    if (ctx2 != null && ctx2.mounted) {
+      await Scrollable.ensureVisible(ctx2, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+    }
+  }
 
   String _categoria = 'TODOS';
   final List<ItemCarrinho> _carrinho = [];
@@ -97,6 +115,7 @@ class _PdvScreenState extends State<PdvScreen> {
     _busca.dispose();
     _recebido.dispose();
     _nsu.dispose();
+    _rolagem.dispose();
     super.dispose();
   }
 
@@ -331,6 +350,7 @@ class _PdvScreenState extends State<PdvScreen> {
 
     return Stack(children: [
       CicPagina(
+        controller: _rolagem,
         padding: EdgeInsets.fromLTRB(largura >= 640 ? 24 : 12, 16, largura >= 640 ? 24 : 12, _carrinho.isNotEmpty && !dois ? 96 : 32),
         children: [
           _topo(c),
@@ -364,10 +384,7 @@ class _PdvScreenState extends State<PdvScreen> {
                 Text(brl(_totalCent / 100), style: fonteMono(context, size: 16, cor: c.emerald)),
               ]),
               const Spacer(),
-              CicBotao('Ir p/ Pagamento', icone: LucideIcons.shoppingCart, compacto: true, onPressed: () {
-                final ctx = _checkoutKey.currentContext;
-                if (ctx != null) Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 350), curve: Curves.easeOut);
-              }),
+              CicBotao('Ir p/ Pagamento', icone: LucideIcons.shoppingCart, compacto: true, onPressed: _irParaPagamento),
             ]),
           ),
         ),

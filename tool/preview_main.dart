@@ -10,16 +10,105 @@ import 'package:app_cic/state/app_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:app_cic/data/repository.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// Repositório em memória para a demonstração (nada vai para o Supabase).
+class _RepoDemo extends CicRepository {
+  _RepoDemo() : super(SupabaseClient('https://preview.invalid', 'preview'));
+
+  SessaoCaixa _sessao = SessaoCaixa(id: 'demo', abertaEm: DateTime.now().subtract(const Duration(hours: 3)), operador: 'Caixa Principal', fundoTroco: 100);
+  final List<Map<String, dynamic>> _relatorios = [];
+
+  @override
+  Future<SessaoCaixa> sessaoCaixaAtual(ContaEstabelecimento conta) async => _sessao;
+  @override
+  Future<SessaoCaixa> abrirNovaSessaoCaixa(String operador, double fundoTroco) async =>
+      _sessao = SessaoCaixa(id: 'demo2', abertaEm: DateTime.now(), operador: operador, fundoTroco: fundoTroco);
+  @override
+  Future<SessaoCaixa> registrarMovimentoCaixa(String sessaoId, MovimentoCaixa mov) async {
+    _sessao.movimentos.insert(0, mov);
+    return _sessao;
+  }
+  @override
+  Future<void> fecharSessaoCaixa(String sessaoId) async {}
+  @override
+  Future<List<Map<String, dynamic>>> relatoriosIa({int limite = 20}) async => _relatorios;
+  @override
+  Future<void> salvarRelatorioIa({required String conteudo, String tipo = 'SOB_DEMANDA', Map<String, dynamic>? metricas}) async =>
+      _relatorios.insert(0, {'id': _relatorios.length + 1, 'conteudo_markdown': conteudo, 'metricas': metricas, 'criado_em': DateTime.now().toIso8601String()});
+  @override
+  Future<void> excluirRelatorioIa(int id) async => _relatorios.removeWhere((r) => r['id'] == id);
+  @override
+  Future<void> salvarConta(Map<String, dynamic> dados) async {}
+}
+
 class _Demo extends AppState {
-  _Demo({required super.tema});
+  _Demo({required super.tema}) : super(repo: _RepoDemo());
+
+  bool _iniciado = false;
 
   @override
   Usuario? get usuario => Usuario(id: 'demo', email: 'lojista@exemplo.com', nome: 'Carlos Eduardo', lojaNome: 'Mercadinho Central');
 
+  // ---- Mesmas regras do banco, em memória ----
+  @override
+  Future<int> salvarProduto(Produto p, {bool somar = true}) async {
+    final i = estoque.indexWhere((x) => x.codigo == p.codigo);
+    final novo = i < 0 ? p.quantidade : (somar ? estoque[i].quantidade + p.quantidade : p.quantidade);
+    p.quantidade = novo;
+    if (i < 0) {
+      estoque = [...estoque, p];
+    } else {
+      p.vendidas = estoque[i].vendidas;
+      estoque[i] = p;
+    }
+    movimentacoes = [
+      Movimentacao(id: 'm${movimentacoes.length + 1}', tipo: 'ENTRADA', motivo: 'COMPRA_FORNECEDOR', produtoCodigo: p.codigo, produtoNome: p.nome, quantidade: p.quantidade, valorUnitario: p.valorCompra, valorTotal: p.quantidade * p.valorCompra, dataHora: DateTime.now(), documento: p.lote),
+      ...movimentacoes,
+    ];
+    notifyListeners();
+    return novo;
+  }
+
+  @override
+  Future<String> finalizarVenda({required List<ItemCarrinho> itens, required String formaPagamento, String? operador, double descontoPct = 0}) async {
+    for (final it in itens) {
+      final p = estoque.firstWhere((x) => x.codigo == it.produto.codigo);
+      if (p.quantidade < it.quantidade) throw ErroCic('Estoque insuficiente para o código ${p.codigo}: saldo atual ${p.quantidade}.');
+    }
+    final id = 'demo${DateTime.now().millisecondsSinceEpoch}';
+    for (final it in itens) {
+      final p = estoque.firstWhere((x) => x.codigo == it.produto.codigo);
+      p.quantidade -= it.quantidade;
+      p.vendidas += it.quantidade;
+      vendas = [
+        VendaItemHistorico(id: '$id-${p.codigo}', vendaId: id, produtoCodigo: p.codigo, nomeProduto: p.nome, quantidade: it.quantidade, valorUnitario: p.valorVenda, custoUnitario: p.valorCompra, data: DateTime.now(), metodoPagamento: formaPagamento),
+        ...vendas,
+      ];
+    }
+    notifyListeners();
+    return id;
+  }
+
+  @override
+  Future<void> ajustarEstoque({required String codigo, required int delta, required String motivo, String? documento, String? observacao, double? valorUnitario}) async {
+    final p = estoque.firstWhere((x) => x.codigo == codigo);
+    if (p.quantidade + delta < 0) throw ErroCic('Estoque insuficiente.');
+    p.quantidade += delta;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> salvarConta(ContaEstabelecimento nova) async {
+    conta = nova;
+    notifyListeners();
+  }
+
   @override
   Future<void> carregar() async {
+    if (_iniciado) return; // dados vivem em memória durante a demonstração
+    _iniciado = true;
     final agora = DateTime.now();
     estoque = [
       Produto(codigo: '7891721201806', nome: 'GLIFAGE XR 500MG TAB RM (30)', lote: 'L-24098A', quantidade: 14, valorCompra: 12.5, markup: 1.8, valorVenda: 22.5, categoria: 'Medicamentos', dataValidade: agora.add(const Duration(days: 180)), vendidas: 8),
