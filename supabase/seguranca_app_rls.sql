@@ -1,28 +1,32 @@
--- Reforca o isolamento por loja sem alterar migrations anteriores.
--- Todas as tabelas de negocio protegidas devem identificar o tenant por uma
--- coluna empresa_id, user_id ou owner_id cujo valor corresponda a auth.uid().
+-- Reforça o isolamento por loja SEM alterar migrations anteriores e SEM afrouxar regras existentes.
+--
+-- Modelo do APP-CIC: empresa_id = auth.uid() do lojista (DEFAULT auth.uid() nas tabelas).
+-- O que este script faz, para toda tabela pública com empresa_id, user_id ou owner_id:
+--   1. liga RLS (se estiver desligado, qualquer usuário logado leria tudo);
+--   2. se a tabela NÃO tem nenhuma policy, cria a policy de dono (lê/grava só a própria loja).
+-- O que ele NÃO faz (de propósito):
+--   - não apaga policies existentes. Ex.: movimentacoes_estoque é um livro-razão só de
+--     leitura e inserção; uma policy FOR ALL abriria UPDATE/DELETE e permitiria adulterar
+--     o histórico de estoque.
+-- Tabelas de negócio sem coluna de dono aparecem como AVISO para revisão manual.
 DO $$
 DECLARE
   tabela RECORD;
-  coluna_dono TEXT;
-  politica RECORD;
+  sem_dono TEXT;
 BEGIN
-  -- Falha explicitamente se surgir uma tabela de negocio sem chave de dono;
-  -- nao habilita RLS silenciosamente deixando os dados inacessiveis ou abertos.
-  IF EXISTS (
-    SELECT 1
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public'
-      AND c.relkind IN ('r', 'p')
-      AND c.relname ~* '(produto|estoque|venda|cliente|caixa|loja|custo|alerta|relatorio|movimentacao)'
-      AND NOT EXISTS (
-        SELECT 1 FROM pg_attribute a
-        WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-          AND a.attname IN ('empresa_id', 'user_id', 'owner_id')
-      )
-  ) THEN
-    RAISE EXCEPTION 'Tabela de negocio sem empresa_id, user_id ou owner_id. Defina a relacao com auth.uid() antes de aplicar RLS.';
+  SELECT string_agg(c.relname, ', ') INTO sem_dono
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'public'
+    AND c.relkind IN ('r', 'p')
+    AND c.relname ~* '(produto|estoque|venda|cliente|caixa|custo|alerta|relatorio|movimentacao)'
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_attribute a
+      WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+        AND a.attname IN ('empresa_id', 'user_id', 'owner_id')
+    );
+  IF sem_dono IS NOT NULL THEN
+    RAISE WARNING 'Revise manualmente (tabela de negócio sem coluna de dono): %', sem_dono;
   END IF;
 
   FOR tabela IN
@@ -31,7 +35,8 @@ BEGIN
         WHEN bool_or(a.attname = 'empresa_id') THEN 'empresa_id'
         WHEN bool_or(a.attname = 'user_id') THEN 'user_id'
         ELSE 'owner_id'
-      END AS coluna_dono
+      END AS coluna_dono,
+      EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid) AS tem_policy
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -40,21 +45,14 @@ BEGIN
       AND a.attname IN ('empresa_id', 'user_id', 'owner_id')
     GROUP BY c.oid, c.relname
   LOOP
-    coluna_dono := tabela.coluna_dono;
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabela.relname);
-
-    -- Remove policies antigas para impedir que policies permissivas se somem
-    -- por OR e reabram acesso a linhas de outras lojas.
-    FOR politica IN
-      SELECT p.polname FROM pg_policy p WHERE p.polrelid = tabela.oid
-    LOOP
-      EXECUTE format('DROP POLICY %I ON public.%I', politica.polname, tabela.relname);
-    END LOOP;
-
-    EXECUTE format(
-      'CREATE POLICY seguranca_app_tenant ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
-      tabela.relname, coluna_dono, coluna_dono
-    );
+    IF NOT tabela.tem_policy THEN
+      EXECUTE format(
+        'CREATE POLICY seguranca_app_tenant ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
+        tabela.relname, tabela.coluna_dono, tabela.coluna_dono
+      );
+      RAISE NOTICE 'Policy de dono criada em %', tabela.relname;
+    END IF;
   END LOOP;
 END;
 $$;
