@@ -77,7 +77,7 @@ class IaConsultor {
       var pts = 0;
       for (final w in termos) {
         if (p.codigo == w) pts += 10;
-        if (RegExp(r'\b' + RegExp.escape(w)).hasMatch(nome)) pts += 2;
+        if (RegExp(r'\b' + RegExp.escape(w) + r'\b').hasMatch(nome)) pts += 2;
       }
       if (pts > 0) pontuados.add((p, pts));
       if (pts > melhor) melhor = pts;
@@ -91,8 +91,8 @@ class IaConsultor {
   dom.ResultadoPrevisao _previsao() => const dom.PrevisaoDemanda().calcular(estado.curvaAbc(dom.PeriodoAbc.mes));
 
   static String _un(double v) {
-    final s = v.toStringAsFixed(1).replaceAll('.', ',');
-    return s.endsWith(',0') ? s.substring(0, s.length - 2) : s;
+    final s = v.toStringAsFixed(v < 1 ? 2 : 1).replaceAll('.', ',');
+    return s.replaceFirst(RegExp(r',0+$'), '');
   }
 
   static final _reNegocio = RegExp(
@@ -101,7 +101,8 @@ class IaConsultor {
       r'ganh|gast|pagar|conta|equilibrio|meta|cresc|aument|atencao|prioridad|previs|demanda|parad|encalh|semana|mes|hoje|ontem');
   static final _reForaDoEscopo = RegExp(
       r'piada|futebol|jogo d|clima|previsao do tempo|quem (e|foi|ganhou)|capital d|politic|eleic|filme|serie|musica|namor|'
-      r'horoscopo|signo|traduz|poema|redacao|escreva um|receita de (bolo|comida)|programa(r|cao)|codigo|bitcoin|cripto');
+      r'horoscopo|signo|traduz|poema|redacao|escreva um|receita de (bolo|comida)|programa(r|cao)|codigo|bitcoin|cripto|'
+      r'\bjoke\b|weather|who (is|won)|\bpoem\b|translate|\bsong\b|\bmovie\b|recipe');
 
   /// Só recusa o que é claramente outro assunto; o resto segue (a IA também tem a regra).
   bool _foraDoEscopo(String t) => !_reNegocio.hasMatch(t) && _reForaDoEscopo.hasMatch(t);
@@ -116,11 +117,11 @@ class IaConsultor {
       }
     }
 
-    for (final i in prev.de(dom.SituacaoPrevisao.ruptura)) {
-      add(i.produtoId, '- ${i.nome}: ZERADO e vendia ${_un(i.mediaDiaria)} un/dia. Reponha já (${i.reposicaoSugerida} un para ${prev.diasAlvo} dias).');
-    }
     for (final p in estado.estoque.where((p) => (p.diasParaVencer ?? 9999) < 0)) {
       add(p.codigo, '- ${p.nome}: VENCIDO (${p.quantidade} un). Retire do ponto de venda.');
+    }
+    for (final i in prev.de(dom.SituacaoPrevisao.ruptura)) {
+      add(i.produtoId, '- ${i.nome}: ZERADO e vendia ${_un(i.mediaDiaria)} un/dia. Reponha já (${i.reposicaoSugerida} un para ${prev.diasAlvo} dias).');
     }
     for (final i in prev.de(dom.SituacaoPrevisao.critico)) {
       add(i.produtoId, '- ${i.nome}: acaba em ${i.coberturaDias} dia(s) no ritmo atual. Compre ${i.reposicaoSugerida} un.');
@@ -137,6 +138,9 @@ class IaConsultor {
     }
     for (final p in estado.estoque.where((p) => p.markup < 1.3 && p.quantidade > 0)) {
       add(p.codigo, '- ${p.nome}: margem baixa (markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x). Revise o preço.');
+    }
+    for (final p in estado.estoque.where((p) => p.quantidade <= 0)) {
+      add(p.codigo, '- ${p.nome}: ZERADO (sem vendas recentes para estimar quanto comprar).');
     }
     if (linhas.isEmpty) {
       return _local('Nada urgente agora: nenhum produto zerado, vencendo, acabando ou abaixo do mínimo.');
@@ -164,6 +168,10 @@ class IaConsultor {
       }
     }
     final comprar = prev.itens.where((i) => i.reposicaoSugerida > 0).take(8).toList();
+    if (comprar.isEmpty && prev.itens.every((i) => i.vendidosNoPeriodo == 0)) {
+      return _local('Ainda não há vendas registradas nos últimos ${prev.diasJanela} dias para estimar uma lista de compras. '
+          'Registre as vendas no caixa e confira o estoque mínimo.');
+    }
     if (comprar.isEmpty) {
       return _local('Pelo ritmo de vendas dos últimos ${prev.diasJanela} dias, nenhum produto precisa de reposição para os próximos ${prev.diasAlvo} dias.');
     }
@@ -188,19 +196,19 @@ class IaConsultor {
     final abc = estado.curvaAbc(dom.PeriodoAbc.mes);
     final fat = abc.valorLiquidoTotalCentavos;
     final lucro = abc.lucroBrutoTotalCentavos;
-    if (fat <= 0) return _local('Ainda não há vendas registradas este mês para eu dizer se você está ganhando dinheiro.');
+    if (fat <= 0) return _local('Ainda não há vendas registradas nos últimos 30 dias para eu dizer se você está ganhando dinheiro.');
     if (lucro == null) {
-      return _local('Você vendeu ${brl(fat / 100)} este mês, mas falta o custo de compra de alguns produtos. '
+      return _local('Nos últimos 30 dias você vendeu ${brl(fat / 100)}, mas falta o custo de compra de alguns produtos. '
           'Cadastre o custo deles para eu calcular o lucro.');
     }
     final custos = estado.custos.fold<int>(0, (s, k) => s + centavos(k.valor));
-    final base = 'Este mês você vendeu ${brl(fat / 100)} e o lucro bruto (venda menos o custo dos produtos) foi ${brl(lucro / 100)}';
+    final base = 'Nos últimos 30 dias você vendeu ${brl(fat / 100)} e o lucro bruto (venda menos o custo dos produtos) foi ${brl(lucro / 100)}';
     if (custos == 0) {
       return _local('$base. Cadastre aluguel, energia e outras despesas em "Custos & Despesas" para eu dizer se sobra dinheiro no fim do mês.');
     }
     final sobra = lucro - custos;
     return _local(sobra >= 0
-        ? '$base. Tirando as despesas da loja (${brl(custos / 100)}), sobram ${brl(sobra / 100)}: sim, você está ganhando dinheiro.'
+        ? '$base. Tirando as despesas mensais da loja (${brl(custos / 100)}), sobram ${brl(sobra / 100)}: sim, você está ganhando dinheiro.'
         : '$base. As despesas da loja somam ${brl(custos / 100)}, então ainda faltam ${brl(-sobra / 100)} para cobrir tudo. '
             'Foque nos produtos de maior retorno e evite estoque parado.');
   }
@@ -217,10 +225,10 @@ class IaConsultor {
     }
     final top = estado.curvaAbc(dom.PeriodoAbc.mes).itens.where((i) => (i.lucroBrutoCentavos ?? 0) > 0).toList()
       ..sort((a, b) => b.lucroBrutoCentavos!.compareTo(a.lucroBrutoCentavos!));
-    if (top.isEmpty) return _local('Ainda não há vendas com custo cadastrado neste mês para comparar o retorno dos produtos.');
+    if (top.isEmpty) return _local('Ainda não há vendas com custo cadastrado nos últimos 30 dias para comparar o retorno dos produtos.');
     final linhas = [for (final i in top.take(5)) '- ${i.nome}: lucro bruto de ${brl(i.lucroBrutoCentavos! / 100)} em ${i.quantidade} un vendidas.'];
     final pediuUm = RegExp(r'deste|desse|daquele|este produto|esse produto').hasMatch(t);
-    return _local('${pediuUm ? 'Me diga o nome do produto para eu detalhar. ' : ''}Produtos que mais deram retorno este mês:\n${linhas.join('\n')}',
+    return _local('${pediuUm ? 'Me diga o nome do produto para eu detalhar. ' : ''}Produtos que mais deram retorno nos últimos 30 dias:\n${linhas.join('\n')}',
         tipo: dom.TipoResposta.lista, fontes: [for (final i in top.take(5)) i.produtoId]);
   }
 
@@ -245,6 +253,12 @@ class IaConsultor {
 
     if (!estado.estoqueConfiavel) {
       return _local('Não consegui ler o seu estoque agora, então não vou informar números que possam estar errados. Puxe a tela para atualizar e tente de novo.',
+          tipo: dom.TipoResposta.indisponivel);
+    }
+
+    final soEstoque = RegExp(r'vencer|vencimento|validade|vencid|o que (eu )?tenho|\btem\b|estoque de|saldo|zerad|em falta').hasMatch(t);
+    if ((estado.erros.containsKey('vendas') || estado.erros.containsKey('custos')) && !soEstoque) {
+      return _local('Não consegui atualizar as vendas ou os custos agora. Puxe a tela para atualizar antes de analisar lucro, retorno ou reposição.',
           tipo: dom.TipoResposta.indisponivel);
     }
 
@@ -301,6 +315,24 @@ class IaConsultor {
     final cobrirCustos = t.contains('equilibrio') ||
         RegExp(r'cobrir (os |meus |minhas |as )?(custos|gastos|despesas|contas)|pagar (as |minhas )?(contas|despesas)|empatar').hasMatch(t);
     if (querRetorno && !cobrirCustos && !RegExp(r'margem baixa|markup').hasMatch(t)) return _retorno(t, achados);
+    if (cobrirCustos) {
+      var custo = 0, retorno = 0;
+      for (final p in estado.estoque) {
+        custo += centavos(p.valorCompra) * p.quantidade;
+        retorno += centavos(p.valorVenda) * p.quantidade;
+      }
+      final lucro = retorno - custo;
+      final fixos = estado.custos.fold<int>(0, (s, k) => s + centavos(k.valor));
+      if (fixos == 0) return _local('Você ainda não cadastrou custos. Cadastre em "Custos & Despesas" para eu calcular o ponto de equilíbrio.');
+      if (retorno == 0 || lucro <= 0) return _local('Com o estoque atual não há lucro projetado para cobrir os custos de ${brl(fixos / 100)} por mês.');
+      final margem = lucro / retorno;
+      final meta = fixos / 100 / margem;
+      return _local(
+        'Seus custos mensais somam ${brl(fixos / 100)}. Com a margem bruta projetada do estoque (${(margem * 100).toStringAsFixed(1).replaceAll('.', ',')}%), '
+        'você precisa vender ${brl(meta)} por mês para empatar.',
+      );
+    }
+
     if (achados.isNotEmpty) {
       final linhas = [
         for (final p in achados.take(6))
@@ -323,24 +355,6 @@ class IaConsultor {
       if (ruins.isEmpty) return _local('Nenhum produto está com markup abaixo de 1,30x.');
       final linhas = [for (final p in ruins.take(8)) '- ${p.nome}: markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x (custo ${brl(p.valorCompra)}, venda ${brl(p.valorVenda)}).'];
       return _local('Produtos com markup abaixo de 1,30x (${ruins.length}):\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: [for (final p in ruins.take(8)) p.codigo]);
-    }
-
-    if (cobrirCustos) {
-      var custo = 0, retorno = 0;
-      for (final p in estado.estoque) {
-        custo += centavos(p.valorCompra) * p.quantidade;
-        retorno += centavos(p.valorVenda) * p.quantidade;
-      }
-      final lucro = retorno - custo;
-      final fixos = estado.custos.fold<int>(0, (s, k) => s + centavos(k.valor));
-      if (fixos == 0) return _local('Você ainda não cadastrou custos. Cadastre em "Custos & Despesas" para eu calcular o ponto de equilíbrio.');
-      if (retorno == 0 || lucro <= 0) return _local('Com o estoque atual não há lucro projetado para cobrir os custos de ${brl(fixos / 100)} por mês.');
-      final margem = lucro / retorno;
-      final meta = fixos / 100 / margem;
-      return _local(
-        'Seus custos mensais somam ${brl(fixos / 100)}. Com a margem bruta projetada do estoque (${(margem * 100).toStringAsFixed(1).replaceAll('.', ',')}%), '
-        'você precisa vender ${brl(meta)} por mês para empatar.',
-      );
     }
 
     final per = _periodoDe(t);
@@ -416,7 +430,7 @@ class IaConsultor {
     // No máximo 2 tentativas de 18 s: se o Gemini falhar, a resposta
     // calculada aparece logo, sem o lojista ficar esperando.
     final resposta = await const dom.ConsultorSeguro(
-      politica: dom.PoliticaRetentativa(maxTentativas: 2, timeoutPorTentativa: Duration(seconds: 18)),
+      politica: dom.PoliticaRetentativa(maxTentativas: 1, timeoutPorTentativa: Duration(seconds: 18)),
     ).responder(
       requestId: 'req-$token',
       chamarIa: () => _chamarServidor(consulta),

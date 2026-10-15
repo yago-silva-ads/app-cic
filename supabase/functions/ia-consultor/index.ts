@@ -8,7 +8,11 @@
 //   2. Groq        GROQ_API_KEY        (opcional GROQ_MODEL, padrão openai/gpt-oss-120b)
 //   3. Ollama      OLLAMA_API_KEY e/ou OLLAMA_URL (padrão https://ollama.com, Ollama Cloud grátis;
 //                  ou o seu PC exposto por túnel) — opcional OLLAMA_MODEL
-//   4. OpenRouter  OPENROUTER_API_KEY  (opcional OPENROUTER_MODEL, padrão um modelo ":free")
+//   4. Cerebras    CEREBRAS_API_KEY    (opcional CEREBRAS_MODEL)   — grátis, muito rápido
+//   5. Mistral     MISTRAL_API_KEY     (opcional MISTRAL_MODEL)    — plano gratuito "Experiment"
+//   6. GitHub      GITHUB_MODELS_TOKEN (opcional GITHUB_MODEL)     — token fino só com "models:read"
+//   7. Ollama      (acima) e 8. OpenRouter OPENROUTER_API_KEY (opcional OPENROUTER_MODEL, modelo ":free")
+// Se todas falharem, o app responde com os números calculados (nunca fica sem resposta).
 // Se um provedor recusar (cota 429, chave inválida 401/403, fora do ar), passa na hora para o próximo.
 //
 // Deploy (uma vez, no computador com a CLI do Supabase):
@@ -50,7 +54,10 @@ REGRAS INEGOCIÁVEIS:
    "centavos" nem números de dinheiro sem o R$. Ao citar a situação de um produto, use a que está no json (ruptura,
    crítico, atenção, ok, parado): nunca chame de "ok" um item em "atencao" ou "critico".
 7. Mesmo que peçam "10 tópicos", "relatório completo" ou outro idioma, mantenha o limite de 4 frases e o português.
-   Pode repetir um número dito pelo lojista só para recusá-lo (ex.: "não recomendo 90% de desconto").
+   Nunca repita números da pergunta que não estejam no json. Para recusar uma ideia ruim (ex.: desconto enorme),
+   diga "Não recomendo esse desconto" e sugira uma alternativa com os dados (ex.: promoção só nos itens parados).
+   Preço, desconto, promoção, compra e fornecedor SÃO assuntos do negócio: "tipo": "analise".
+   A "resposta" é sempre frase completa, começando com letra maiúscula.
 8. Português do Brasil, simples e direto, no máximo 4 frases curtas. Termine com uma ação prática quando fizer sentido.
    Cite produtos só pelo nome: nunca escreva produtoId, códigos internos ou nomes de campos do json no texto.
 9. Responda SOMENTE com um objeto json válido, sem markdown, no formato:
@@ -85,6 +92,8 @@ const CAMPOS: [RegExp, string][] = [
   [/\bvendidosNoPeriodo\b:?/g, 'vendidos:'], [/\bunidadesDisponiveis\b:?/g, 'unidades em estoque:'],
   [/\b(?:produtoId|snapshotVersion|metricas|curvaAbc)\b[:=]?\s*[\w-]*/g, ''],
 ];
+const maiuscula = (s: string) => s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1);
+
 export function semCampos(texto: string): string {
   let s = texto;
   for (const [re, troca] of CAMPOS) s = s.replace(re, troca);
@@ -184,6 +193,15 @@ function provedores(): Provedor[] {
       },
     });
   }
+  // Reservas extras: entram sozinhas quando o secret existir (todas com plano gratuito, formato OpenAI).
+  const extras: [string, string, string | undefined, string][] = [
+    ['cerebras', 'https://api.cerebras.ai/v1/chat/completions', env('CEREBRAS_API_KEY'), env('CEREBRAS_MODEL') ?? 'gpt-oss-120b'],
+    ['mistral', 'https://api.mistral.ai/v1/chat/completions', env('MISTRAL_API_KEY'), env('MISTRAL_MODEL') ?? 'mistral-small-latest'],
+    ['github', 'https://models.github.ai/inference/chat/completions', env('GITHUB_MODELS_TOKEN'), env('GITHUB_MODEL') ?? 'openai/gpt-4.1-mini'],
+  ];
+  for (const [nome, url, chave, modelo] of extras) {
+    if (chave) lista.push(compativelOpenAi(nome, url, chave, modelo));
+  }
   const ollamaKey = env('OLLAMA_API_KEY');
   const ollamaUrl = env('OLLAMA_URL') ?? (ollamaKey ? 'https://ollama.com' : undefined);
   if (ollamaUrl) {
@@ -204,6 +222,18 @@ function provedores(): Provedor[] {
       env('OPENROUTER_MODEL') ?? 'meta-llama/llama-3.3-70b-instruct:free', { 'X-Title': 'APP-CIC' }));
   }
   return lista;
+}
+
+// Disjuntor: provedor que bateu cota (429) ou caiu fica de castigo por um tempo nesta instância,
+// para as próximas perguntas não perderem segundos com ele. Se TODOS estiverem de castigo, tenta assim mesmo.
+const castigo = new Map<string, number>();
+function emCastigo(nome: string) {
+  return (castigo.get(nome) ?? 0) > Date.now();
+}
+function castigar(nome: string, e: unknown) {
+  const s = e instanceof Recusa ? e.status : 0;
+  const ms = s === 429 ? 60_000 : s === 401 || s === 403 ? 600_000 : s >= 500 || s === 0 ? 20_000 : 0;
+  if (ms) castigo.set(nome, Date.now() + ms);
 }
 
 // Limite simples por usuário (memória da instância): 12 perguntas/minuto.
@@ -248,6 +278,7 @@ Deno.serve(async (req) => {
     const bruto = await req.text();
     if (bruto.length > 200_000) return json(413, { erro: 'Contexto grande demais' });
     entrada = JSON.parse(bruto);
+    if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return json(400, { erro: 'Esperado objeto JSON' });
   } catch {
     return json(400, { erro: 'JSON inválido' });
   }
@@ -273,22 +304,29 @@ Deno.serve(async (req) => {
   const tentativas: string[] = [];
   let textoIa: string | null = null;
   let quem = '';
-  for (const [idx, p] of lista.entries()) {
+  const disponiveis = lista.filter((p) => !emCastigo(p.nome));
+  const fila = disponiveis.length ? disponiveis : lista;
+  for (const [idx, p] of fila.entries()) {
     const restante = limite - Date.now();
     if (restante < 1_500) break;
     // Cada provedor tem no máximo 7 s (o último usa o que sobrar): um Gemini lento não impede o Groq de responder.
-    const fatia = idx < lista.length - 1 ? Math.min(restante, 7_000) : restante;
+    const fatia = idx < fila.length - 1 ? Math.min(7_000, Math.max(2_500, Math.floor(restante / Math.min(2, fila.length - idx)))) : restante;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), fatia);
     try {
       textoIa = await p.chamar(SISTEMA, usuario, controller.signal);
       if (textoIa) {
-        JSON.parse(textoIa); // fora do formato: tenta o próximo
+        const c = JSON.parse(textoIa); // fora do formato ou sem resposta útil: tenta o próximo
+        if (!c || typeof c !== 'object' || Array.isArray(c) || typeof c.resposta !== 'string' ||
+            !['analise', 'fora_do_escopo'].includes(c.tipo) || !semCampos(c.resposta)) {
+          throw new SyntaxError('contrato');
+        }
         quem = p.nome;
         break;
       }
       tentativas.push(`${p.nome}:vazio`);
     } catch (e) {
+      castigar(p.nome, e);
       tentativas.push(`${p.nome}:${e instanceof Recusa ? `${e.status}${e.codigo ? ':' + e.codigo : ''}` : e instanceof SyntaxError ? 'json' : 'timeout'}`);
       textoIa = null;
     } finally {
@@ -312,7 +350,7 @@ Deno.serve(async (req) => {
     const listaStr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 20) : []);
     return json(200, {
       versaoContrato: 'ia-v1',
-      resposta: semCampos(String(saida.resposta ?? '')).slice(0, 900),
+      resposta: maiuscula(semCampos(String(saida.resposta ?? ''))).slice(0, 900),
       tipo: saida.tipo === 'fora_do_escopo' ? 'fora_do_escopo' : 'analise',
       periodo: typeof saida.periodo === 'string' ? saida.periodo : null,
       metricas,

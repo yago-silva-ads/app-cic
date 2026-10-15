@@ -105,12 +105,18 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
       if (texto == null) _entrada.clear();
     });
     _descer();
-    final r = await _consultor.perguntar(t);
-    if (!mounted) return;
-    setState(() {
-      _enviando = false;
-      if (r != null) _msgs.add(_Msg(deUsuario: false, texto: r.resposta, origem: r.origem, aviso: r.aviso));
-    });
+    try {
+      final r = await _consultor.perguntar(t);
+      if (mounted && r != null) {
+        setState(() => _msgs.add(_Msg(deUsuario: false, texto: r.resposta, origem: r.origem, aviso: r.aviso)));
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _msgs.add(_Msg(deUsuario: false, texto: 'Não consegui concluir a consulta agora. Tente de novo.')));
+      }
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
     _descer();
   }
 
