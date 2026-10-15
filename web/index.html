@@ -38,16 +38,10 @@
 </head>
 <body>
   <div id="carregando"><i></i><span>APP-CIC</span></div>
-  <script>
-    // Some o splash quando o Flutter desenhar o primeiro quadro.
-    window.addEventListener('flutter-first-frame', function () {
-      var el = document.getElementById('carregando');
-      if (el) el.remove();
-    });
-  </script>
+  <script src="splash.js"></script>
   <script src="flutter_bootstrap.js" async></script>
   <!-- ZXing: leitura de código de barras (EAN/UPC/Code128/QR) pela câmera na versão Web/iPhone -->
-  <script src="https://unpkg.com/@zxing/library@0.19.1" type="application/javascript"></script>
+  <script src="vendor/zxing-0.19.1.min.js" type="application/javascript"></script>
   <script src="scanner.js" type="application/javascript"></script>
 </body>
 </html>

@@ -43,6 +43,10 @@ jobs:
         working-directory: packages/cic_domain
         run: dart pub get && dart test
 
+      - name: Testes da função de IA (provedores falsos, sem chave)
+        working-directory: supabase/functions/ia-consultor/teste
+        run: npx -y esbuild@0.24.0 ../index.ts --format=esm --outfile=ia_check.mjs && node edge_test.mjs
+
       - name: Testes do app
         run: |
           if [ -d test ]; then flutter test; else echo "sem testes do app"; fi
