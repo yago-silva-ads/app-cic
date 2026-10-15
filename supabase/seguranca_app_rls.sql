@@ -38,6 +38,10 @@ BEGIN
     WHERE n.nspname = 'public'
       AND c.relkind IN ('r', 'p')
       AND a.attname IN ('empresa_id', 'user_id', 'owner_id')
+      AND (
+        a.attname = 'empresa_id'
+        OR c.relname ~* '(produto|estoque|venda|cliente|caixa|loja|custo|alerta|relatorio|movimentacao)'
+      )
     GROUP BY c.oid, c.relname
   LOOP
     coluna_dono := tabela.coluna_dono;
