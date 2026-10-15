@@ -231,6 +231,8 @@ function emCastigo(nome: string) {
   return (castigo.get(nome) ?? 0) > Date.now();
 }
 function castigar(nome: string, e: unknown) {
+  // Resposta fora do formato é problema daquela resposta, não do provedor: não castiga.
+  if (e instanceof SyntaxError) return;
   const s = e instanceof Recusa ? e.status : 0;
   const ms = s === 429 ? 60_000 : s === 401 || s === 403 ? 600_000 : s >= 500 || s === 0 ? 20_000 : 0;
   if (ms) castigo.set(nome, Date.now() + ms);
