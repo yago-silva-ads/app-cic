@@ -5,7 +5,6 @@ DO $$
 DECLARE
   tabela RECORD;
   coluna_dono TEXT;
-  politica RECORD;
 BEGIN
   -- Falha explicitamente se surgir uma tabela de negocio sem chave de dono;
   -- nao habilita RLS silenciosamente deixando os dados inacessiveis ou abertos.
@@ -47,16 +46,11 @@ BEGIN
     coluna_dono := tabela.coluna_dono;
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabela.relname);
 
-    -- Remove policies antigas para impedir que policies permissivas se somem
-    -- por OR e reabram acesso a linhas de outras lojas.
-    FOR politica IN
-      SELECT p.polname FROM pg_policy p WHERE p.polrelid = tabela.oid
-    LOOP
-      EXECUTE format('DROP POLICY %I ON public.%I', politica.polname, tabela.relname);
-    END LOOP;
-
+    -- Uma policy RESTRICTIVE combina por AND com as permissivas existentes.
+    -- Assim, restringe o tenant sem ampliar operações (p.ex. DELETE de vendas).
+    EXECUTE format('DROP POLICY IF EXISTS seguranca_app_tenant ON public.%I', tabela.relname);
     EXECUTE format(
-      'CREATE POLICY seguranca_app_tenant ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
+      'CREATE POLICY seguranca_app_tenant ON public.%I AS RESTRICTIVE FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
       tabela.relname, coluna_dono, coluna_dono
     );
   END LOOP;
