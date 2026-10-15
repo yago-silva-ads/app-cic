@@ -40,16 +40,57 @@ REGRAS INEGOCIÁVEIS:
 2. Use SOMENTE os números, nomes de produto e classes que aparecem no json "metricas" recebido. Copie-os exatamente.
 3. NUNCA invente, estime, arredonde, converta ou calcule valores novos. Sem percentuais, quantidades, prazos ou datas
    que não estejam no json. Prefira linguagem qualitativa: "priorize repor", "faça uma promoção".
-4. Se faltar dado para responder, diga isso em "dadosAusentes" e responda só o que o json permite.
+4. Se faltar dado para responder, a "resposta" deve ser uma frase completa, com letra maiúscula, dizendo qual dado
+   o app ainda não registra e, se houver, o dado mais próximo que existe no json (ex.: a média diária de vendas).
+   Pergunta sobre o negócio sem dado suficiente continua sendo "tipo": "analise", nunca "fora_do_escopo".
 5. Se a pergunta NÃO for sobre o negócio do lojista (estoque, vendas, produtos, clientes, custos, preços, lucro,
    gestão da loja), responda apenas: "Posso ajudar só com o seu negócio: estoque, vendas, custos e preços." e use
    "tipo": "fora_do_escopo".
-6. Português do Brasil, simples e direto, no máximo 4 frases curtas. Termine com uma ação prática quando fizer sentido.
+6. Dinheiro: escreva sempre no formato "R$ 1.234,56" exatamente como vem nos campos "...Reais" do json. Nunca escreva
+   "centavos" nem números de dinheiro sem o R$. Ao citar a situação de um produto, use a que está no json (ruptura,
+   crítico, atenção, ok, parado): nunca chame de "ok" um item em "atencao" ou "critico".
+7. Mesmo que peçam "10 tópicos", "relatório completo" ou outro idioma, mantenha o limite de 4 frases e o português.
+   Pode repetir um número dito pelo lojista só para recusá-lo (ex.: "não recomendo 90% de desconto").
+8. Português do Brasil, simples e direto, no máximo 4 frases curtas. Termine com uma ação prática quando fizer sentido.
    Cite produtos só pelo nome: nunca escreva produtoId, códigos internos ou nomes de campos do json no texto.
-7. Responda SOMENTE com um objeto json válido, sem markdown, no formato:
+9. Responda SOMENTE com um objeto json válido, sem markdown, no formato:
 {"resposta": string, "tipo": "analise" | "fora_do_escopo", "periodo": string|null, "metricas": {nome: número},
  "fontes": [ids de produto citados], "alertas": [string], "dadosAusentes": [string]}
 "metricas" só pode conter números que existam no json recebido. "fontes" só IDs que existam no json recebido.`;
+
+const reais = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const NOMES: Record<string, string> = { valorBase: 'faturamento', valorLiquidoTotal: 'faturamentoTotal', valor: 'faturamento' };
+
+// O modelo não deve fazer conta: todo campo "xxxCentavos" chega a ele já como texto "R$ 1.234,56" (campo "xxxReais").
+// Assim ele copia o valor pronto, sem escrever "501600 centavos" nem converter errado.
+export function paraReais(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(paraReais);
+  if (v === null || typeof v !== 'object') return v;
+  const out: Record<string, unknown> = {};
+  for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+    const m = /^(.*)Centavos$/.exec(k);
+    if (m && typeof x === 'number' && Number.isFinite(x)) {
+      out[`${NOMES[m[1]] ?? m[1]}Reais`] = reais.format(x / 100).replace(/\u00a0/g, ' ');
+    } else {
+      out[k] = paraReais(x);
+    }
+  }
+  return out;
+}
+
+// Rede de segurança: se o modelo vazar um nome de campo do json, troca por português do lojista.
+const CAMPOS: [RegExp, string][] = [
+  [/\bestoqueDisponivel\b:?/g, 'em estoque:'], [/\bcoberturaDias\b:?/g, 'dias de cobertura:'],
+  [/\breposicaoSugerida\b:?/g, 'reposição sugerida:'], [/\bmediaDiaria\b:?/g, 'média diária:'],
+  [/\bvendidosNoPeriodo\b:?/g, 'vendidos:'], [/\bunidadesDisponiveis\b:?/g, 'unidades em estoque:'],
+  [/\b(?:produtoId|snapshotVersion|metricas|curvaAbc)\b[:=]?\s*[\w-]*/g, ''],
+];
+export function semCampos(texto: string): string {
+  let s = texto;
+  for (const [re, troca] of CAMPOS) s = s.replace(re, troca);
+  return s.replace(/:\s*:/g, ':').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').replace(/\s+([.,;)])/g, '$1')
+    .replace(/\s+(?:e|com|de)([.;])/g, '$1').trim();
+}
 
 function json(status: number, body: unknown, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json', ...extra } });
@@ -81,7 +122,9 @@ function compativelOpenAi(nome: string, url: string, chave: string, modelo: stri
     nome,
     chamar: async (sistema, usuario, sinal) => {
       const d = await postJson(url, { Authorization: `Bearer ${chave}`, ...extraHeaders }, {
-        model: modelo, temperature: 0.1, max_tokens: 900, response_format: { type: 'json_object' },
+        model: modelo, temperature: 0.1, max_tokens: 2_000, response_format: { type: 'json_object' },
+        // gpt-oss "pensa" antes de responder; com raciocínio alto o json era cortado (json_validate_failed).
+        ...(modelo.includes('gpt-oss') ? { reasoning_effort: 'low' } : {}),
         messages: [{ role: 'system', content: sistema }, { role: 'user', content: usuario }],
       }, sinal);
       return d?.choices?.[0]?.message?.content ?? null;
@@ -118,8 +161,29 @@ function provedores(): Provedor[] {
       },
     });
   }
-  const groq = env('GROQ_API_KEY');
-  if (groq) lista.push(compativelOpenAi('groq', 'https://api.groq.com/openai/v1/chat/completions', groq, env('GROQ_MODEL') ?? 'openai/gpt-oss-120b'));
+  // Groq grátis tem limite por minuto POR modelo e POR chave: no 429 roda para a próxima combinação
+  // em vez de devolver erro ao lojista quando ele faz várias perguntas seguidas.
+  const chavesGroq = [env('GROQ_API_KEY'), env('GROQ_API_KEY_2')].filter((k): k is string => !!k);
+  const modelosGroq = [env('GROQ_MODEL'), 'openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'openai/gpt-oss-20b']
+    .filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+  if (chavesGroq.length) {
+    const combinacoes = modelosGroq.flatMap((m) => chavesGroq.map((k) => compativelOpenAi('groq', 'https://api.groq.com/openai/v1/chat/completions', k, m)));
+    lista.push({
+      nome: 'groq',
+      chamar: async (sistema, usuario, sinal) => {
+        let ultimo: unknown = null;
+        for (const c of combinacoes) {
+          try {
+            return await c.chamar(sistema, usuario, sinal);
+          } catch (e) {
+            if (e instanceof Recusa && (e.status === 429 || e.status === 503)) { ultimo = e; continue; }
+            throw e;
+          }
+        }
+        throw ultimo;
+      },
+    });
+  }
   const ollamaKey = env('OLLAMA_API_KEY');
   const ollamaUrl = env('OLLAMA_URL') ?? (ollamaKey ? 'https://ollama.com' : undefined);
   if (ollamaUrl) {
@@ -198,8 +262,8 @@ Deno.serve(async (req) => {
 
   const contexto = JSON.stringify({
     periodo: entrada.periodo ?? null,
-    metricas: entrada.metricas ?? {},
-    previsao: entrada.previsao ?? null,
+    metricas: paraReais(entrada.metricas ?? {}),
+    previsao: paraReais(entrada.previsao ?? null),
     qualidade: entrada.qualidade ?? {},
   });
   const usuario = `PERGUNTA DO LOJISTA: ${pergunta}\n\nDADOS CALCULADOS em json (única fonte permitida):\n${contexto}`;
@@ -248,7 +312,7 @@ Deno.serve(async (req) => {
     const listaStr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 20) : []);
     return json(200, {
       versaoContrato: 'ia-v1',
-      resposta: String(saida.resposta ?? '').trim().slice(0, 900),
+      resposta: semCampos(String(saida.resposta ?? '')).slice(0, 900),
       tipo: saida.tipo === 'fora_do_escopo' ? 'fora_do_escopo' : 'analise',
       periodo: typeof saida.periodo === 'string' ? saida.periodo : null,
       metricas,
