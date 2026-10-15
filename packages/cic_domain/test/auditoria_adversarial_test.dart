@@ -40,6 +40,46 @@ void main() {
   List<String> validar(String texto, [ContextoAterramento? contexto]) =>
       verificarAterramento(RespostaConsultor.daIa(saida(texto)), contexto ?? ctx);
 
+  group('achado 1: fatos do produto citado na mesma frase', () {
+    test('rejeita estoque de Fósforo atribuído ao Café', () {
+      expect(validar('Café 500g tem 40 unidades em estoque.'),
+          contains(contains('número de outro produto: 40')));
+    });
+    test('aceita o próprio estoque de Café', () {
+      expect(validar('Café 500g tem 5 unidades em estoque.'), isEmpty);
+    });
+    test('aceita números de dois produtos citados na mesma frase', () {
+      expect(validar('Café 500g tem 5 unidades e Leite 1L tem 6 unidades.'), isEmpty);
+    });
+    test('aceita total geral da loja mesmo com produto citado', () {
+      expect(validar('Café 500g integra o estoque de 80 unidades da loja.'), isEmpty);
+      expect(validar('Café 500g integra o faturamento total de R\$ 1.000,00.'), isEmpty);
+    });
+    test('rejeita classe errada antes do nome', () {
+      expect(validar('Classe C: Café 500g.'), contains(contains('calculado A')));
+      expect(validar('Classe A: Café 500g.'), isEmpty);
+    });
+    test('rejeita dinheiro e percentual de Leite atribuídos ao Café', () {
+      expect(validar('Café 500g faturou R\$ 150,00.'),
+          contains(contains('número de outro produto')));
+      expect(validar('Café 500g representa 15,0% do faturamento.'),
+          contains(contains('número de outro produto')));
+    });
+    test('preço projetado pertence ao produto calculado', () {
+      final projetado = calcularFixture(fixture, periodo: PeriodoAbc.projetado);
+      final contexto = ContextoAterramento.de(
+        snapshotVersion: 'snap-001', abc: [projetado],
+      );
+      expect(validar('Café 500g custa R\$ 100,00.', contexto), isEmpty);
+      expect(validar('Leite 1L custa R\$ 100,00.', contexto),
+          contains(contains('número de outro produto')));
+    });
+    test('fatos não passam de uma frase para outra', () {
+      expect(validar('Leite 1L tem 6 unidades. Café 500g tem 6 unidades.'),
+          contains(contains('número de outro produto: 6')));
+    });
+  });
+
   group('achado 3: números e nomes de produtos', () {
     for (final texto in [
       'Há 999kg disponíveis.',
