@@ -109,13 +109,11 @@ class AuthService {
         throw ErroCic('Conta temporariamente bloqueada por $bloq minutos após 5 tentativas incorretas.');
       }
       final msg = ex.message.toLowerCase();
-      if (msg.contains('email not confirmed')) {
-        throw ErroCic('Confirme seu e-mail pelo link que enviamos antes de entrar.');
-      }
       if (msg.contains('rate') || ex.statusCode == '429') {
         throw ErroCic('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
       }
-      throw ErroCic('E-mail ou senha incorretos. Verifique seus dados.');
+      // Mesma resposta para conta inexistente, senha errada ou e-mail não confirmado.
+      throw ErroCic('Não foi possível entrar. Verifique seus dados ou a caixa de entrada.');
     } on ErroCic {
       rethrow;
     } catch (_) {
