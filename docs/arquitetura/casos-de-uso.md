@@ -18,7 +18,7 @@ flowchart LR
         J(["Cadastrar custos e estimar ponto de equilíbrio"])
         K(["Perguntar ao assistente"])
         M(["Importar produtos por XML de NF-e"])
-        P(["Consultar previsão de demanda — ia-gratis"])
+        P(["Consultar previsão de demanda"])
         V(["Validar saldo e registrar venda atomicamente"])
     end
     L --> A
@@ -40,8 +40,8 @@ flowchart LR
     K --> I
 ```
 
-O acesso aos dados reais depende de sessão autenticada e das políticas da loja. O modo demonstração usa dados em memória e não substitui a configuração do backend.
+O acesso aos dados reais depende de sessão autenticada e das políticas da loja. O build com `--dart-define=DEMO=true` usa `Config.demo` e `DemoRepository` para abrir uma loja de exemplo em memória sem login; perguntas abertas ao assistente ainda podem usar a Edge Function.
 
-No PDV, informar Pix ou outra forma de pagamento registra o método; isso não equivale a uma confirmação automática por instituição financeira. A previsão de demanda está indicada como integração de `ia-gratis`, não como código presente nesta base.
+No PDV, informar Pix ou outra forma de pagamento registra o método; isso não equivale a uma confirmação automática por instituição financeira. A previsão de demanda está implementada na release em `PrevisaoDemanda`, com janela padrão de 30 dias e horizonte de reposição de 14 dias.
 
 Fontes: [telas](../../lib/screens/), [repositório de dados](../../lib/data/repository.dart) e [venda atômica](../../supabase/migracao_v3_estoque_atomico_e_isolamento.sql).

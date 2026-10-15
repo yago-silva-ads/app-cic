@@ -1,48 +1,60 @@
 # Componentes
 
-O Flutter atende web e Android. O pacote Dart `cic_domain` concentra regras reutilizáveis; o Supabase autentica o lojista e persiste os dados. A Edge Function recebe o token da sessão e mantém as credenciais dos provedores no servidor.
+Arquitetura conferida na release `release-blindada`, commit `740534b`. O Flutter atende web e Android; `cic_domain` concentra cálculos e validação. No modo normal, Supabase Auth e Postgres atendem a conta da loja.
 
 ```mermaid
 flowchart LR
     subgraph Cliente["Dispositivo do lojista"]
-        UI["App Flutter — web / Android"]
+        UI["Flutter — web / Android"]
+        Config["Config.demo — definido no build"]
         Estado["AppState — snapshot e atualização"]
-        Dominio["cic_domain — estoque, vendas, ABC e aterramento"]
+        Dominio["cic_domain — estoque, ABC, previsão e aterramento"]
         Repo["Repository — consultas e RPCs"]
-        Consultor["IaConsultor — regras locais e perguntas abertas"]
+        Demo["DemoRepository — loja em memória"]
+        Consultor["IaConsultor — regras locais primeiro"]
         UI --> Estado
-        Estado --> Dominio
+        Config -->|"DEMO=false"| Repo
+        Config -->|"DEMO=true, sem login"| Demo
         Estado --> Repo
+        Estado --> Demo
+        Estado --> Dominio
         UI --> Consultor
         Consultor --> Dominio
     end
     subgraph Supabase["Backend Supabase"]
-        Auth["Auth — sessão / JWT"]
+        Auth["Auth — sessão do modo normal"]
         DB[("Postgres — RLS por empresa_id = auth.uid()")]
-        RPC["RPCs — registrar_venda, ajustar_estoque, salvar_produto"]
-        Edge["Edge Function ia-consultor — valida JWT e consulta provedores"]
-        Auth -.->|"identidade da sessão"| DB
+        RPC["RPCs — venda, ajuste e cadastro"]
+        Gateway["Gateway — verificação JWT conforme implantação"]
+        Edge["ia-consultor — reais, provedores e limpeza da resposta"]
         RPC --> DB
-        Edge -->|"valida sessão"| Auth
+        Gateway --> Edge
     end
-    UI --> Auth
-    Repo -->|"sessão autenticada"| DB
+    UI -->|"modo normal"| Auth
+    Auth -.->|"sessão"| Repo
+    Repo --> DB
     Repo --> RPC
-    Consultor -->|"pergunta + contexto calculado + JWT"| Edge
-    subgraph Provedores["Cadeia do branch ia-gratis — integração pendente nesta base"]
+    Consultor -->|"pergunta aberta e contexto; token de sessão ou anon no DEMO"| Gateway
+    subgraph Provedores["Tentativas dos provedores configurados"]
         Gemini["Gemini"]
-        Groq["Groq"]
-        Ollama["Ollama — servidor acessível pela Edge Function"]
-        OpenRouter["OpenRouter — modelo gratuito configurado"]
-        Gemini -.->|"indisponível / limite"| Groq
-        Groq -.->|"indisponível / limite"| Ollama
-        Ollama -.->|"indisponível / limite"| OpenRouter
+        Groq["Groq — até 2 chaves x 3 modelos padrão"]
+        Ollama["Ollama — serviço remoto ou URL própria"]
+        OpenRouter["OpenRouter"]
+        Gemini -.->|"falha / limite"| Groq
+        Groq -.->|"falha / limite"| Ollama
+        Ollama -.->|"falha / limite"| OpenRouter
     end
     Edge --> Gemini
 ```
 
-As setas entre provedores representam a ordem de tentativa coordenada pela Edge Function, não chamadas de um provedor para outro. Na base `643fdd6`, o arquivo da função contém Gemini e DeepSeek opcional; a cadeia acima documenta a integração solicitada de `ia-gratis`.
+`AppState` recebe apenas o repositório selecionado. O desenho mostra as duas alternativas, não gravações simultâneas. `flutter build web --dart-define=DEMO=true` ativa `Config.demo`; `lib/main.dart` injeta `DemoRepository` de `lib/data/repository_demo.dart` e abre a loja sem login. Os registros ficam em memória e são recriados com a instância. Perguntas abertas ainda podem enviar contexto de exemplo ao servidor.
 
-“Grátis” depende das cotas e modelos disponíveis. Ollama precisa de uma máquina ligada e alcançável pelo backend: `localhost` dentro da Edge Function não é o computador do desenvolvedor. A indisponibilidade dos provedores deve terminar em resposta calculada no app. As chaves de IA e `service_role` não pertencem ao build Flutter.
+As setas entre provedores representam a ordem de tentativa coordenada pela função. A lista ignora provedores sem configuração. No Groq, há até duas chaves e três modelos padrão; `GROQ_MODEL` pode acrescentar um modelo distinto. O rodízio acontece em 429/503 e respeita o tempo restante.
 
-Fontes: [AppState](../../lib/state/app_state.dart), [Repository](../../lib/data/repository.dart), [IaConsultor](../../lib/services/ia_consultor.dart), [domínio](../../packages/cic_domain/lib/) e [Edge Function](../../supabase/functions/ia-consultor/index.ts).
+O servidor converte campos monetários `*Centavos` em textos `*Reais` antes do modelo. A saída passa por `semCampos`, que traduz ou remove nomes internos conhecidos. O app confere novamente o contrato e o aterramento.
+
+O gateway é responsável pela verificação de JWT quando habilitada; `usuarioDoJwt` apenas extrai o identificador para o limite em memória, sem validar assinatura por si só. No DEMO, sem sessão, o cliente envia a chave pública como bearer. A aceitação depende da implantação; em caso de recusa, o app usa o fallback calculado.
+
+Ollama usa `OLLAMA_URL` ou, com chave e sem URL, `https://ollama.com`. Servidor próprio precisa estar ligado e acessível. “Grátis” depende das cotas e modelos disponíveis. Chaves de IA e `service_role` não pertencem ao build Flutter.
+
+Fontes na release: `lib/main.dart`, `lib/core/config.dart`, `lib/data/repository_demo.dart`, [AppState](../../lib/state/app_state.dart), [Repository](../../lib/data/repository.dart), [IaConsultor](../../lib/services/ia_consultor.dart), [domínio](../../packages/cic_domain/lib/) e [Edge Function](../../supabase/functions/ia-consultor/index.ts).

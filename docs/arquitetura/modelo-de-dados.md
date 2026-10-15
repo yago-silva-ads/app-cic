@@ -1,6 +1,6 @@
 # Modelo de dados e isolamento por loja
 
-Modelo reconstruído dos SQLs versionados em `supabase/`, considerando a evolução v3. Não é uma exportação do banco em produção. Os `CREATE TABLE` originais de `produtos`, `historico_vendas` e `custos_operacionais` não estão nesta base; seus campos aparecem em alterações, funções, índices e consultas.
+Modelo reconstruído dos SQLs versionados em `supabase/`, considerando a evolução v3 e a migração de segurança presentes em `release-blindada` (`740534b`). Não é uma exportação do banco em produção. Os `CREATE TABLE` originais de `produtos`, `historico_vendas` e `custos_operacionais` não estão nesta base; seus campos aparecem em alterações, funções, índices e consultas.
 
 No diagrama, `desconhecido` indica tipo não comprovado pelo DDL local. Não foi atribuída PK a `historico_vendas` ou `custos_operacionais` sem evidência da definição original. A migração garante `produtos.id` como PK, mas preserva seu tipo se já existir; cria UUID apenas quando falta a coluna.
 
@@ -121,7 +121,7 @@ O modelo atual associa a loja ao usuário autenticado: `empresa_id = auth.uid()`
 | Movimento histórico | v3 oferece políticas SELECT/INSERT, sem UPDATE/DELETE |
 | Perfil e caixa | `contas_estabelecimento` e `sessoes_caixa` têm políticas SELECT/INSERT/UPDATE por dono |
 
-As RPCs de escrita são `SECURITY DEFINER` com `search_path` fixo e filtro explícito por usuário. A RLS isoladamente não substitui essa validação interna. Os scripts são evolutivos: executar novamente uma política antiga permissiva pode reabrir acesso; conferir o estado final após aplicar migrações.
+As RPCs de escrita são `SECURITY DEFINER` com `search_path` fixo e filtro explícito por usuário. A RLS isoladamente não substitui essa validação interna. A release inclui `seguranca_app_rls.sql`: habilita RLS e acrescenta uma política `RESTRICTIVE` por dono, combinada por AND com as permissivas. Preserva as operações permitidas em tabelas já configuradas; se não há nenhuma policy permissiva, cria acesso do próprio usuário. Para tabelas de negócio identificadas pelo script sem coluna de dono, falha explicitamente. Conferir o estado final após aplicar migrações.
 
 ## Views e fontes
 
@@ -135,6 +135,7 @@ As views `vw_kpis_vendas_mes`, `vw_top_produtos_mes`, `vw_produtos_validade_crit
 | [RLS de custos](../../supabase/rls_custos_operacionais.sql) | Políticas de custos |
 | [RLS de novas tabelas](../../supabase/rls_novas_tabelas.sql) | Alertas e relatórios |
 | [Blindagem de views](../../supabase/blindagem_views_e_rls.sql) | Proteção de consultas derivadas |
+| `supabase/seguranca_app_rls.sql` (na release) | RLS e política restritiva; reconhece empresa_id, user_id ou owner_id |
 | [Triggers](../../supabase/triggers_inteligentes_v2.sql) | Automatismos de negócio |
 
 O arquivo legado `limpeza_e_trava_not_null.sql` contém exclusões e uma FK antiga somente por código com cascata. Ele não descreve a relação final v3 e não deve ser executado cegamente depois dela. Para um ambiente novo, obter primeiro o schema inicial das três tabelas legadas e revisar a ordem dos scripts; esta documentação não promete um bootstrap completo a partir deles.

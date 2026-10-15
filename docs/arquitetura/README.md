@@ -1,6 +1,6 @@
 # Arquitetura do APP-CIC
 
-Documentação baseada no commit local `643fdd6` de `redesign-aistudio`, sem consulta ao banco em produção. Os diagramas Mermaid são renderizados pelo GitHub ao abrir os arquivos Markdown.
+Documentação da release `release-blindada` (PR #7), conferida no commit local `740534b`, sem consulta ao banco em produção. Os diagramas Mermaid são renderizados pelo GitHub ao abrir os arquivos Markdown.
 
 | Diagrama | O que explica |
 | --- | --- |
@@ -10,12 +10,14 @@ Documentação baseada no commit local `643fdd6` de `redesign-aistudio`, sem con
 | [Classes do domínio](classes-dominio.md) | Estoque, vendas, ABC e contratos de IA |
 | [Modelo de dados](modelo-de-dados.md) | Tabelas, chaves e isolamento por loja |
 
-## Estado da documentação
+## Versão documentada
 
-- **Confirmado nesta base:** regras locais de estoque, validade, atenção, custos e ABC; consulta autenticada à Edge Function; validação de aterramento e resposta calculada em caso de falha.
-- **Integração do branch `ia-gratis`, informada pelo responsável:** previsão por média móvel de 30 dias e cadeia Gemini → Groq → Ollama → OpenRouter. Esse branch não está disponível neste clone. Os diagramas identificam essas partes, sem inventar assinaturas ou configurações.
-- **Segurança em integração:** o branch separado `seguranca-app` contém o trabalho de endurecimento. O README diferencia os controles existentes dos que dependem dessa integração e da configuração do Supabase.
+A release reúne a cadeia Gemini → Groq → Ollama → OpenRouter, a previsão de demanda e a segurança. As fontes foram lidas na cópia local de `release-blindada`; o branch `docs-uml` contém apenas esta atualização de documentação, sem copiar código da release.
 
-Diagramas de classes representam o domínio Dart, e não tabelas um a um. Por exemplo, `Lote` e `Venda` são objetos do domínio; os SQLs locais armazenam o lote em `produtos` e as linhas vendidas em `historico_vendas`.
+As regras calculadas no app atendem perguntas objetivas. Só perguntas abertas seguem para o servidor, que formata valores em reais, faz as tentativas de provedores e limpa nomes internos de campos antes da validação de aterramento no app.
 
-Ao integrar os branches, conferir nomes e contratos de previsão, ordem dos provedores, variáveis de ambiente e políticas efetivamente aplicadas ao banco. Atualizar esta indicação de versão depois da conferência.
+`Config.demo` ativa a loja em memória de `lib/data/repository_demo.dart` por `--dart-define=DEMO=true`, dispensando login. Perguntas abertas ainda podem usar o servidor. Veja também o [roteiro](../tutorial/roteiro.md) e as [artes](../tutorial/arte/).
+
+Diagramas de classes representam o domínio Dart, e não tabelas um a um. Por exemplo, `Lote` e `Venda` são objetos do domínio; os SQLs armazenam o lote em `produtos` e as linhas vendidas em `historico_vendas`.
+
+A disponibilidade de provedores depende dos secrets, das cotas e do serviço implantado. RLS, confirmação de e-mail e limites de autenticação precisam estar aplicados/configurados no Supabase; a presença do código não comprova o estado da produção.

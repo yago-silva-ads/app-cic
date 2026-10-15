@@ -141,14 +141,40 @@ classDiagram
     class AbcReportResult
     class AbcItemResult
     class PrevisaoDemanda {
-        <<ia_gratis>>
+        int diasAlvo
+        int diasCriticos
+        calcular(ResultadoCurvaAbc abc) ResultadoPrevisao
+    }
+    class ResultadoPrevisao {
+        int diasJanela
+        int diasAlvo
     }
     class ItemPrevisao {
-        <<ia_gratis>>
+        String produtoId
+        String nome
+        ClasseAbc classe
+        int estoque
+        int vendidosNoPeriodo
+        int mediaDiariaCentesimos
+        int coberturaDias
+        int reposicaoSugerida
+        SituacaoPrevisao situacao
     }
     class SituacaoPrevisao {
-        <<ia_gratis>>
+        <<enumeration>>
+        ruptura
+        critico
+        atencao
+        ok
+        parado
+        semDados
     }
+    PrevisaoDemanda ..> ResultadoCurvaAbc
+    PrevisaoDemanda ..> ResultadoPrevisao
+    ResultadoPrevisao "1" o-- "*" ItemPrevisao
+    ItemPrevisao --> SituacaoPrevisao
+    ConsultaIa --> ResultadoPrevisao
+    ContextoAterramento ..> ResultadoPrevisao
     ConsultaIa --> ResumoEstoque
     ConsultaIa --> ResultadoCurvaAbc
     ContextoAterramento ..> ResumoEstoque
@@ -163,6 +189,10 @@ classDiagram
 
 `ControleRequisicoes` é usado pelo serviço do app para ignorar respostas antigas. A validação do fluxo atual passa por `ConsultorSeguro` e pela função `verificarAterramento`; `AiGroundingGuard` e os contratos `AbcReportResult`/`AbcItemResult` também existem no pacote, mas não são a mesma implementação desse fluxo.
 
-Os três nomes de previsão foram incluídos conforme o branch `ia-gratis` informado pelo responsável: `PrevisaoDemanda` representa a funcionalidade de previsão, `ItemPrevisao` seus itens e `SituacaoPrevisao` sua situação. Não há declaração local para confirmar campos, métodos, valores de enum ou associações, por isso eles aparecem sem relações inventadas. A regra funcional solicitada é a média móvel de 30 dias.
+As classes de previsão foram conferidas em `packages/cic_domain/lib/src/estoque/previsao.dart` da release `740534b`. `PrevisaoDemanda.calcular` recebe o resultado ABC e usa janela padrão de 30 dias, horizonte de 14 dias e limiar crítico de 7 dias. Produtos arquivados são ignorados.
+
+`mediaDiariaCentesimos` representa unidades por dia multiplicadas por 100, não dinheiro. A cobertura usa dias completos; a reposição cobre o horizonte descontando o saldo. `estoque` e `coberturaDias` podem ser nulos, embora simplificados no desenho. Saldo desconhecido gera `semDados`; sem vendas e com saldo, `parado`; sem vendas nem saldo, `ok`. Com vendas, saldo zerado gera `ruptura`, cobertura até 7 dias gera `critico`, abaixo de 14 gera `atencao` e as demais situações são `ok`.
+
+`ResultadoPrevisao` agrupa itens, janela e horizonte, permite filtragem por situação e serialização para o assistente. Os itens são ordenados por situação e cobertura. `ConsultaIa` transporta a previsão e `ContextoAterramento` a inclui na validação.
 
 Fontes: [estoque](../../packages/cic_domain/lib/src/estoque/estoque.dart), [eventos comerciais](../../packages/cic_domain/lib/src/vendas/eventos.dart), [apuração](../../packages/cic_domain/lib/src/vendas/apuracao.dart), [ABC](../../packages/cic_domain/lib/src/abc/curva_abc.dart), [tempo](../../packages/cic_domain/lib/src/tempo/), [IA](../../packages/cic_domain/lib/src/ia/), [guard adicional](../../packages/cic_domain/lib/services/ai_grounding_guard.dart) e [contrato ABC](../../packages/cic_domain/lib/contracts/abc_contract.dart).
