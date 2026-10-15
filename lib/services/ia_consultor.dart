@@ -441,8 +441,8 @@ class IaConsultor {
   }
 
   Future<Object?> _chamarServidor(dom.ConsultaIa consulta) async {
-    // Na demonstração não há login: a função aceita a chave pública (com o limite por minuto dela).
-    final token = Supabase.instance.client.auth.currentSession?.accessToken ?? (Config.demo ? Config.supabaseAnonKey : null);
+    // Sem login não há IA remota (a função exige usuário logado); na demonstração o app responde com o cálculo.
+    final token = Supabase.instance.client.auth.currentSession?.accessToken;
     if (token == null) throw const dom.ProvedorIndisponivelIa('sem sessão', retentavel: false);
     final http.Response r;
     try {
