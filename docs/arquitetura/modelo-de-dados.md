@@ -1,6 +1,6 @@
 # Modelo de dados e isolamento por loja
 
-Modelo reconstruído dos SQLs versionados em `supabase/`, considerando a evolução v3 e a migração de segurança presentes em `release-blindada` (`740534b`). Não é uma exportação do banco em produção. Os `CREATE TABLE` originais de `produtos`, `historico_vendas` e `custos_operacionais` não estão nesta base; seus campos aparecem em alterações, funções, índices e consultas.
+Modelo reconstruído dos SQLs versionados em `supabase/`, considerando a evolução v3 e a migração de segurança de `release-blindada`. Não é uma exportação do banco em produção. Os `CREATE TABLE` originais de `produtos`, `historico_vendas` e `custos_operacionais` não estão nesta base; seus campos aparecem em alterações, funções, índices e consultas. O diagrama documenta oito tabelas identificáveis nesses SQLs; a verificação informada pelo responsável abrange dez tabelas no banco de produção, cujos dois nomes adicionais não são afirmados aqui sem catálogo do banco.
 
 No diagrama, `desconhecido` indica tipo não comprovado pelo DDL local. Não foi atribuída PK a `historico_vendas` ou `custos_operacionais` sem evidência da definição original. A migração garante `produtos.id` como PK, mas preserva seu tipo se já existir; cria UUID apenas quando falta a coluna.
 
@@ -105,7 +105,7 @@ erDiagram
 - `historico_vendas (empresa_id, produto_codigo)` referencia `produtos (empresa_id, codigo)` com `ON DELETE RESTRICT`. Um código de barras pode existir em lojas diferentes. Produtos com histórico podem ser arquivados em vez de apagados.
 - `venda_id` agrupa linhas do histórico e movimentos gerados na mesma venda. Não existe `CREATE TABLE vendas` nesses SQLs.
 - `movimentacoes_estoque.produto_codigo` e `alertas_sistema.produto_codigo` são referências lógicas; os respectivos `CREATE TABLE` não declaram FK para produtos.
-- As oito tabelas usam `empresa_id` para isolamento. Isso não constitui uma FK automaticamente: não foi encontrada declaração de FK para `auth.users` nesses SQLs.
+- As oito tabelas desenhadas usam `empresa_id` para isolamento. A blindagem de produção cobre dez tabelas e também reconhece `user_id` ou `owner_id` quando essa for a coluna de dono. Isso não constitui uma FK automaticamente: não foi encontrada declaração de FK para `auth.users` nesses SQLs.
 - Não há tabela relacional de clientes ou lotes declarada nos SQLs locais. Não confundir o objeto Dart `Lote` com uma tabela existente.
 
 ## RLS e operações
@@ -121,11 +121,17 @@ O modelo atual associa a loja ao usuário autenticado: `empresa_id = auth.uid()`
 | Movimento histórico | v3 oferece políticas SELECT/INSERT, sem UPDATE/DELETE |
 | Perfil e caixa | `contas_estabelecimento` e `sessoes_caixa` têm políticas SELECT/INSERT/UPDATE por dono |
 
-As RPCs de escrita são `SECURITY DEFINER` com `search_path` fixo e filtro explícito por usuário. A RLS isoladamente não substitui essa validação interna. A release inclui `seguranca_app_rls.sql`: habilita RLS e acrescenta uma política `RESTRICTIVE` por dono, combinada por AND com as permissivas. Preserva as operações permitidas em tabelas já configuradas; se não há nenhuma policy permissiva, cria acesso do próprio usuário. Para tabelas de negócio identificadas pelo script sem coluna de dono, falha explicitamente. Conferir o estado final após aplicar migrações.
+As RPCs de escrita recentes são `SECURITY DEFINER` com `search_path` fixo e filtro explícito por usuário. A RLS isoladamente não substitui essa validação interna. `seguranca_app_rls.sql` habilita RLS e acrescenta uma política `RESTRICTIVE` por dono, combinada por AND com as permissivas. Preserva as operações permitidas em tabelas já configuradas; se não há nenhuma policy permissiva, cria acesso do próprio usuário. Para tabelas de negócio identificadas pelo script sem coluna de dono, falha explicitamente.
+
+**Aplicado em produção (segundo verificação informada pelo responsável):** RLS e política `RESTRICTIVE` em dez tabelas. A conta dona continua vendo as linhas da própria loja; uma conta autenticada de outra loja viu zero linhas no teste. A Edge Function `ia-consultor` exige sessão de usuário; somente a chave pública `anon` recebe 401. Nomes de produto são truncados e tratados como dados no prompt, e o fluxo de IA usa disjuntor e rodízio de provedores. No web, a CSP bloqueia script inline (`script-src` sem `unsafe-inline`), o ZXing é local, o build de publicação fixa `DEMO=false` e o login usa mensagem genérica para e-mail não confirmado.
+
+**Pendente no SQL Editor do dono:** executar `supabase/restringir_funcoes_legadas.sql` para revogar de `anon` a execução das três funções legadas de cron; executar `supabase/limite_ia.sql` para que o limite por minuto seja persistente entre instâncias. Sem o segundo script, a Edge Function recorre ao contador em memória. `limite_ia.sql` foi criado na branch de release, mas não integra esta branch histórica de documentação. **Pendente no painel Auth:** confirmação de e-mail (considerar o limite de envios do SMTP gratuito), senha mínima de 12 caracteres e rate limits. Essas ações não são substituídas por validações do app.
+
+**Testes da release no CI:** 101 do domínio, 25 do app e 13 da Edge Function com provedores falsos. Os testes automatizados não substituem a verificação de grants, RLS e configuração Auth no painel de produção.
 
 ## Views e fontes
 
-As views `vw_kpis_vendas_mes`, `vw_top_produtos_mes`, `vw_produtos_validade_critica`, `vw_produtos_estoque_baixo` e `vw_faturamento_mensal` são projeções, não tabelas adicionais. O script de blindagem trata a segurança das views e políticas.
+As views `vw_kpis_vendas_mes`, `vw_top_produtos_mes`, `vw_produtos_validade_critica`, `vw_produtos_estoque_baixo` e `vw_faturamento_mensal` são projeções, não tabelas adicionais. O responsável confirmou `security_invoker` nas views do banco; o script de blindagem também trata a segurança das views e políticas.
 
 | Fonte local | Evidência principal |
 | --- | --- |

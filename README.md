@@ -14,7 +14,7 @@ O APP-CIC ajuda pequenos lojistas a vender, controlar o estoque e entender os n�
 - **Alertas:** estoque baixo, validade e situações que merecem atenção, com histórico e marcação de leitura.
 - **Custos e ponto de equilíbrio:** despesas fixas e variáveis e estimativa de faturamento necessário para cobri-las, conforme a margem usada no cálculo. Projeção não é receita já realizada.
 
-A release `release-blindada` (PR #7), conferida localmente no commit `740534b`, reúne previsão de demanda por média móvel de 30 dias, a cadeia Gemini → Groq → Ollama → OpenRouter e os controles de segurança. Esta documentação descreve essa release; a consulta foi feita aos arquivos locais, sem verificar implantação em produção.
+A release `release-blindada` (PR #7) reúne previsão de demanda por média móvel de 30 dias, a cadeia Gemini → Groq → Ollama → OpenRouter e os controles de segurança. O estado de produção descrito abaixo foi informado pelo responsável pelo projeto; esta atualização de documentação não acessou o painel Supabase.
 
 ## Como funciona o assistente
 
@@ -28,13 +28,13 @@ As camadas gratuitas têm limites. Ollama pode usar o serviço remoto configurad
 
 ## Segurança
 
-- **RLS por loja:** os SQLs definem isolamento por `empresa_id = auth.uid()`. As funções de escrita validam o usuário e usam sua loja. A proteção depende das migrações e permissões aplicadas no Supabase.
-- **Credenciais:** o Flutter recebe a URL e a chave pública `anon`. Chaves de IA e `service_role` ficam no servidor, nunca em `--dart-define`, imagens ou arquivos públicos.
-- **Senha forte:** o cadastro exige ao menos 12 caracteres, com maiúsculas, minúsculas e números. Há bloqueio local após cinco falhas, por 15 minutos, em janela de cinco minutos. No painel Supabase, configurar confirmação de e-mail, política de senha e limites de tentativas; o controle no cliente não substitui o servidor.
-- **CSP e headers web:** `vercel.json` inclui CSP, HSTS, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` e `Permissions-Policy`. A compilação configurada no Vercel remove arquivos `.map` do resultado web.
-- **Build ofuscado:** releases Android/iOS devem usar `--obfuscate --split-debug-info`. Guardar os símbolos fora dos artefatos públicos. Ofuscação dificulta a leitura do binário, mas não substitui RLS nem protege segredos embutidos.
+**Aplicado em produção (conforme verificação informada pelo responsável):** RLS ativa em dez tabelas, com política `RESTRICTIVE` por dono/loja. A loja autenticada continua vendo seus dados; outra conta autenticada vê zero linhas. O isolamento usa `empresa_id = auth.uid()` quando essa é a coluna de dono. A Edge Function `ia-consultor` exige usuário logado: chamada apenas com a chave pública `anon` recebe 401. Nomes de produtos enviados à IA são cortados e tratados como dados, não como instruções. Há disjuntor e rodízio entre provedores para falhas e limites de cota; isso melhora a disponibilidade, mas não garante resposta em toda indisponibilidade.
 
-O logout limpa o estado da loja e as preferências de sessão/cache/tentativas, preservando o tema. A migração `supabase/seguranca_app_rls.sql` acrescenta políticas restritivas por dono. Esta documentação não verificou o painel nem a aplicação dessas configurações em produção. Consulte o [modelo de dados e políticas](docs/arquitetura/modelo-de-dados.md).
+No web, a CSP não usa `unsafe-inline` em `script-src`, o ZXing é servido localmente e o build da Vercel fixa `DEMO=false`. O login apresenta mensagem genérica para e-mail não confirmado, sem revelar se a conta existe. O Flutter recebe apenas URL e chave pública `anon`; chaves de IA e `service_role` ficam no servidor. O build web não publica arquivos `.map`. Para Android/iOS, a release usa `--obfuscate --split-debug-info`; os símbolos devem ficar em local privado. O logout limpa estado da loja e cache de sessão/tentativas, preservando o tema.
+
+**Pendente de ação do dono no SQL Editor do Supabase:** aplicar, após revisão, `supabase/restringir_funcoes_legadas.sql` para retirar de `anon` a execução de três funções legadas de cron; e `supabase/limite_ia.sql` para ativar a cota por minuto persistente. Até aplicar o segundo script, a função usa o limite em memória, que não é global entre instâncias. O arquivo `limite_ia.sql` está na branch de release, ainda não nesta branch de documentação.
+
+**Pendente no painel Auth:** ativar confirmação de e-mail, observando a cota de envio do SMTP gratuito; configurar senha mínima de 12 caracteres e rate limits de autenticação. A validação e o bloqueio locais de tentativas ajudam na interface, mas não substituem os limites do servidor. Consulte o [modelo de dados e políticas](docs/arquitetura/modelo-de-dados.md), a [auditoria de IA](docs/auditoria_ia.md) e a [revisão de segurança](docs/revisao_seguranca.md).
 
 ## Stack
 
@@ -89,13 +89,13 @@ flutter run -d chrome --dart-define=DEMO=true
 
 `Config.demo` seleciona `DemoRepository`, definido em `lib/data/repository_demo.dart`. O app abre uma loja de exemplo sem login, com estoque, vendas, custos e caixa em memória; alterações se perdem quando essa instância é recriada. Os registros da loja de exemplo não são persistidos no banco.
 
-Perguntas abertas ao assistente podem enviar a pergunta e o contexto de exemplo à Edge Function. Sem sessão, o app usa a chave pública nesse modo; a aceitação depende da configuração implantada. Se a chamada falhar, continua disponível a resposta calculada. O modo demonstração não dispensa toda conexão externa: o app inicializa o cliente Supabase e pode usar outros serviços.
+Na configuração de produção, a Edge Function exige usuário logado e rejeita a chave `anon` sozinha com 401. Por isso, sem sessão, a demo mantém as respostas calculadas, mas não recebe análise remota de IA. O modo demonstração não dispensa toda conexão externa: o app inicializa o cliente Supabase e pode usar outros serviços.
 
 ### Supabase
 
-1. Configure Auth e as URLs de redirecionamento. Ative confirmação de e-mail, política de senha e limites de autenticação.
+1. Configure Auth e as URLs de redirecionamento. Ative confirmação de e-mail, senha mínima de 12 caracteres e rate limits de autenticação; confira a cota do SMTP gratuito antes de divulgar o cadastro.
 2. Obtenha o schema inicial de `produtos`, `historico_vendas` e `custos_operacionais` e revise as evoluções em `supabase/`. Os SQLs locais não constituem um bootstrap completo de banco vazio. Não execute todos em ordem alfabética: há scripts de limpeza e relações antigas substituídas pela v3.
-3. Aplique as migrações revisadas e confira o isolamento com duas contas distintas. Veja as fontes no [modelo de dados](docs/arquitetura/modelo-de-dados.md).
+3. Aplique as migrações revisadas e confira o isolamento com duas contas distintas. No projeto de produção, RLS com política restritiva já foi aplicada em dez tabelas; ainda faltam `restringir_funcoes_legadas.sql` e `limite_ia.sql` no SQL Editor. Veja as fontes no [modelo de dados](docs/arquitetura/modelo-de-dados.md).
 4. Cadastre os secrets no painel de Edge Functions e publique `ia-consultor`. Configure os provedores desejados: `GEMINI_API_KEY`/`GEMINI_MODEL`; `GROQ_API_KEY`, `GROQ_API_KEY_2` e `GROQ_MODEL`; `OLLAMA_API_KEY`, `OLLAMA_URL` e `OLLAMA_MODEL`; `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`. Só os provedores configurados participam da cadeia. Os campos de modelo são opcionais; a segunda chave Groq também é opcional.
 
 Com a Supabase CLI autenticada, publique a função no seu projeto:
@@ -107,6 +107,8 @@ supabase functions deploy ia-consultor --project-ref SEU_PROJECT_REF
 Esses passos são instruções de implantação, não operações executadas pela documentação.
 
 ### Testes
+
+Na release, o CI executa 101 testes do domínio, 25 do app e 13 da Edge Function com provedores falsos. Esses testes não fazem chamadas reais aos provedores nem comprovam, sozinhos, a configuração do banco em produção.
 
 ```sh
 flutter test
@@ -122,7 +124,7 @@ Volte à raiz antes de executar os builds.
 Web:
 
 ```sh
-flutter build web --release --no-source-maps --dart-define=SUPABASE_URL=https://SEU-PROJETO.supabase.co --dart-define=SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLICA
+flutter build web --release --no-source-maps --dart-define=DEMO=false --dart-define=SUPABASE_URL=https://SEU-PROJETO.supabase.co --dart-define=SUPABASE_ANON_KEY=SUA_CHAVE_ANON_PUBLICA
 ```
 
 Publique apenas `build/web` e confira a ausência de arquivos `.map`. CSP e demais headers são aplicados pela hospedagem, não pela compilação. A release já configura esses headers e remove source maps em `vercel.json`.
