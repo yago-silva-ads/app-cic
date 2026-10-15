@@ -90,6 +90,17 @@ class PrevisaoDemanda {
   final int diasCriticos;
 
   ResultadoPrevisao calcular(ResultadoCurvaAbc abc, {int diasJanela = 30}) {
+    if (diasJanela <= 0) {
+      throw ArgumentError.value(diasJanela, 'diasJanela', 'Deve ser positivo');
+    }
+    if (diasAlvo <= 0) {
+      throw ArgumentError.value(diasAlvo, 'diasAlvo', 'Deve ser positivo');
+    }
+    if (diasCriticos < 0 || diasCriticos > diasAlvo) {
+      throw ArgumentError.value(
+        diasCriticos, 'diasCriticos', 'Deve estar entre zero e diasAlvo',
+      );
+    }
     final itens = <ItemPrevisao>[];
     for (final i in abc.itens) {
       if (i.arquivado) continue;

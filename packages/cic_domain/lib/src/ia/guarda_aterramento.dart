@@ -139,7 +139,7 @@ int _pow10(int n) {
 final _reData = RegExp(r'\b(\d{1,2})/(\d{1,2})/(\d{4})\b');
 final _reDinheiro = RegExp(r'(-?)\s*R\$\s*(-?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{1,2}))?');
 final _rePercentual = RegExp(r'(-?\d+)(?:,(\d+))?\s*%');
-final _reNumero = RegExp(r'(?<![\w,])(-?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?(?![\w%])');
+final _reNumero = RegExp(r'(?<![\w,])(-?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?(?![\d%]|,\d)');
 final _reSentenca = RegExp(r'[.!?](\s|$)');
 final _reItemLista = RegExp(r'^\s*(?:[-•*]|\d+[.)])\s+', multiLine: true);
 
@@ -162,8 +162,31 @@ List<String> verificarAterramento(RespostaConsultor r, ContextoAterramento ctx) 
   }
 
   var texto = r.resposta.replaceAll(' ', ' ');
+  // Embalagens fazem parte do nome (ex.: Café 500g), não são afirmações
+  // quantitativas. Remover nomes inteiros, maiores primeiro, sem esconder
+  // números de produtos desconhecidos ou de palavras apenas parecidas.
+  final nomes = ctx._nomes.values.where((n) => n.trim().isNotEmpty).toSet().toList()
+    ..sort((a, b) => b.length.compareTo(a.length));
+  for (final nome in nomes) {
+    texto = texto.replaceAll(
+      RegExp(
+        r'(?<![\p{L}\p{N}_])' +
+            RegExp.escape(nome.replaceAll(' ', ' ')) +
+            r'(?![\p{L}\p{N}_])',
+        caseSensitive: false,
+        unicode: true,
+      ),
+      ' ',
+    );
+  }
+  texto = texto.replaceAll('−', '-');
   texto = texto.replaceAllMapped(_reData, (m) {
     final d = DataCivil(int.parse(m[3]!), int.parse(m[2]!), int.parse(m[1]!));
+    final normalizada = DateTime.utc(d.ano, d.mes, d.dia);
+    if (normalizada.year != d.ano || normalizada.month != d.mes || normalizada.day != d.dia) {
+      violacoes.add('data inexistente: ${m[0]}');
+      return ' ';
+    }
     if (!ctx._dataPermitida(d)) violacoes.add('data fora do snapshot: ${m[0]}');
     return ' ';
   });
