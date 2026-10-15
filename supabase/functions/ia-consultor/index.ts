@@ -1,26 +1,28 @@
-// Edge Function `ia-consultor`: proxy seguro para o Gemini.
+// Edge Function `ia-consultor`: proxy seguro para IAs GRATUITAS, com reserva automática.
 //
-// Por que existe: a chave do Gemini NUNCA pode ir dentro do app (qualquer um
-// extrai de um app Web/iPhone). Ela fica só aqui, como secret do Supabase.
+// Por que existe: nenhuma chave de IA pode ir dentro do app (qualquer um extrai de um app
+// Web/iPhone/Android). As chaves ficam só aqui, como secrets do Supabase.
+//
+// Ordem (todas com plano gratuito). Cada uma só entra se o secret existir:
+//   1. Gemini      GEMINI_API_KEY      (opcional GEMINI_MODEL)
+//   2. Groq        GROQ_API_KEY        (opcional GROQ_MODEL, padrão openai/gpt-oss-120b)
+//   3. Ollama      OLLAMA_API_KEY e/ou OLLAMA_URL (padrão https://ollama.com, Ollama Cloud grátis;
+//                  ou o seu PC exposto por túnel) — opcional OLLAMA_MODEL
+//   4. OpenRouter  OPENROUTER_API_KEY  (opcional OPENROUTER_MODEL, padrão um modelo ":free")
+// Se um provedor recusar (cota 429, chave inválida 401/403, fora do ar), passa na hora para o próximo.
 //
 // Deploy (uma vez, no computador com a CLI do Supabase):
-//   supabase functions deploy ia-consultor --project-ref drszfkijbemrzzgxvboy
-//   supabase secrets set GEMINI_API_KEY=<sua chave> --project-ref drszfkijbemrzzgxvboy
-//   (opcional) supabase secrets set GEMINI_MODEL=gemini-2.5-flash
+//   npx supabase login
+//   npx supabase functions deploy ia-consultor --project-ref drszfkijbemrzzgxvboy
+//   npx supabase secrets set GROQ_API_KEY=<chave> --project-ref drszfkijbemrzzgxvboy
 //
 // verify_jwt fica LIGADO (padrão): só lojista logado chama esta função.
-// O app valida a resposta (contrato ia-v1 + aterramento); aqui só limitamos
-// o que o modelo recebe e devolvemos o JSON no formato esperado.
+// O app valida a resposta de novo (contrato ia-v1 + aterramento): qualquer número, produto
+// ou classe que não esteja nos dados calculados faz a resposta ser descartada.
 
-// Modelos tentados em ordem; se o Google aposentar um (404), cai no próximo.
-const MODELOS = [Deno.env.get('GEMINI_MODEL'), 'gemini-flash-latest', 'gemini-2.5-flash'].filter(
-  (m, i, a): m is string => !!m && a.indexOf(m) === i,
-);
-const API_KEY = Deno.env.get('GEMINI_API_KEY');
-// Alternativa/reserva: DeepSeek (API compatível com OpenAI, cota alta e barata).
-// Secret opcional: DEEPSEEK_API_KEY. Recebe só números agregados, nunca dados pessoais.
-const DEEPSEEK_KEY = Deno.env.get('DEEPSEEK_API_KEY');
-const DEEPSEEK_MODELO = Deno.env.get('DEEPSEEK_MODEL') ?? 'deepseek-chat';
+type Provedor = { nome: string; chamar: (sistema: string, usuario: string, sinal: AbortSignal) => Promise<string | null> };
+
+const env = (k: string) => Deno.env.get(k)?.trim() || undefined;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -28,22 +30,108 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const SISTEMA = `Você é o consultor financeiro do APP-CIC, para donos de pequenos comércios no Brasil.
+const SISTEMA = `Você é o consultor especialista do APP-CIC: varejo e pequeno comércio no Brasil (mercadinho, padaria,
+loja, farmácia, restaurante). Domina giro de estoque, curva ABC, cobertura de estoque, ruptura, margem, markup,
+validade, ponto de equilíbrio, reposição e promoção.
+
 REGRAS INEGOCIÁVEIS:
-1. Use SOMENTE os números, nomes de produto e classes que aparecem no JSON "metricas" recebido. Copie-os exatamente.
-2. NUNCA invente, estime, arredonde, converta ou calcule valores novos. Sem percentuais nem datas que não estejam no JSON.
-3. Se faltar dado para responder, diga isso em "dadosAusentes" e responda apenas o que o JSON permite.
-4. Não cite quantidades de itens, dias ou prazos como números novos (ex.: "em 3 dias", "10 unidades") se não estiverem no JSON. Prefira linguagem qualitativa: "priorize repor", "faça uma promoção".
-5. Linguagem simples, direta, em português do Brasil. No máximo 4 frases.
-6. Responda SOMENTE com JSON válido no formato:
-{"resposta": string, "tipo": "analise", "periodo": string|null, "metricas": {nome: número}, "fontes": [ids de produto citados], "alertas": [], "dadosAusentes": [string]}
-"metricas" só pode conter números que existam no JSON recebido. "fontes" só IDs que existam no JSON recebido.`;
+1. Responda EXATAMENTE o que foi perguntado, de forma específica. Nada de texto genérico, saudação, lista de
+   recursos do app ou assuntos que não foram pedidos.
+2. Use SOMENTE os números, nomes de produto e classes que aparecem no json "metricas" recebido. Copie-os exatamente.
+3. NUNCA invente, estime, arredonde, converta ou calcule valores novos. Sem percentuais, quantidades, prazos ou datas
+   que não estejam no json. Prefira linguagem qualitativa: "priorize repor", "faça uma promoção".
+4. Se faltar dado para responder, diga isso em "dadosAusentes" e responda só o que o json permite.
+5. Se a pergunta NÃO for sobre o negócio do lojista (estoque, vendas, produtos, clientes, custos, preços, lucro,
+   gestão da loja), responda apenas: "Posso ajudar só com o seu negócio: estoque, vendas, custos e preços." e use
+   "tipo": "fora_do_escopo".
+6. Português do Brasil, simples e direto, no máximo 4 frases curtas. Termine com uma ação prática quando fizer sentido.
+   Cite produtos só pelo nome: nunca escreva produtoId, códigos internos ou nomes de campos do json no texto.
+7. Responda SOMENTE com um objeto json válido, sem markdown, no formato:
+{"resposta": string, "tipo": "analise" | "fora_do_escopo", "periodo": string|null, "metricas": {nome: número},
+ "fontes": [ids de produto citados], "alertas": [string], "dadosAusentes": [string]}
+"metricas" só pode conter números que existam no json recebido. "fontes" só IDs que existam no json recebido.`;
 
 function json(status: number, body: unknown, extra: Record<string, string> = {}) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS, 'Content-Type': 'application/json', ...extra },
-  });
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json', ...extra } });
+}
+
+class Recusa extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`);
+  }
+}
+
+async function postJson(url: string, headers: Record<string, string>, body: unknown, sinal: AbortSignal) {
+  const r = await fetch(url, { method: 'POST', signal: sinal, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Recusa(r.status);
+  return await r.json();
+}
+
+// Formato OpenAI (Groq, OpenRouter): mesmo corpo, muda URL/chave/modelo.
+function compativelOpenAi(nome: string, url: string, chave: string, modelo: string, extraHeaders: Record<string, string> = {}): Provedor {
+  return {
+    nome,
+    chamar: async (sistema, usuario, sinal) => {
+      const d = await postJson(url, { Authorization: `Bearer ${chave}`, ...extraHeaders }, {
+        model: modelo, temperature: 0.1, max_tokens: 900, response_format: { type: 'json_object' },
+        messages: [{ role: 'system', content: sistema }, { role: 'user', content: usuario }],
+      }, sinal);
+      return d?.choices?.[0]?.message?.content ?? null;
+    },
+  };
+}
+
+function provedores(): Provedor[] {
+  const lista: Provedor[] = [];
+  const gemini = env('GEMINI_API_KEY');
+  if (gemini) {
+    // gemini-2.5-flash foi aposentado para contas novas; os "flash" grandes às vezes dão 503 (alta demanda),
+    // então a lista desce até os "lite", que quase sempre respondem.
+    const modelos = [env('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite']
+      .filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
+    lista.push({
+      nome: 'gemini',
+      chamar: async (sistema, usuario, sinal) => {
+        for (const modelo of modelos) {
+          try {
+            const d = await postJson(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, { 'x-goog-api-key': gemini }, {
+              systemInstruction: { parts: [{ text: sistema }] },
+              contents: [{ role: 'user', parts: [{ text: usuario }] }],
+              generationConfig: { temperature: 0.1, maxOutputTokens: 1024, responseMimeType: 'application/json' },
+            }, sinal);
+            return d?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
+          } catch (e) {
+            // 404 = modelo aposentado; 503 = sobrecarregado: tenta o próximo modelo do Gemini
+            if (e instanceof Recusa && (e.status === 404 || e.status === 503)) continue;
+            throw e;
+          }
+        }
+        return null;
+      },
+    });
+  }
+  const groq = env('GROQ_API_KEY');
+  if (groq) lista.push(compativelOpenAi('groq', 'https://api.groq.com/openai/v1/chat/completions', groq, env('GROQ_MODEL') ?? 'openai/gpt-oss-120b'));
+  const ollamaKey = env('OLLAMA_API_KEY');
+  const ollamaUrl = env('OLLAMA_URL') ?? (ollamaKey ? 'https://ollama.com' : undefined);
+  if (ollamaUrl) {
+    lista.push({
+      nome: 'ollama',
+      chamar: async (sistema, usuario, sinal) => {
+        const d = await postJson(`${ollamaUrl.replace(/\/$/, '')}/api/chat`, ollamaKey ? { Authorization: `Bearer ${ollamaKey}` } : {}, {
+          model: env('OLLAMA_MODEL') ?? 'gpt-oss:120b', stream: false, format: 'json', options: { temperature: 0.1 },
+          messages: [{ role: 'system', content: sistema }, { role: 'user', content: usuario }],
+        }, sinal);
+        return d?.message?.content ?? null;
+      },
+    });
+  }
+  const openrouter = env('OPENROUTER_API_KEY');
+  if (openrouter) {
+    lista.push(compativelOpenAi('openrouter', 'https://openrouter.ai/api/v1/chat/completions', openrouter,
+      env('OPENROUTER_MODEL') ?? 'meta-llama/llama-3.3-70b-instruct:free', { 'X-Title': 'APP-CIC' }));
+  }
+  return lista;
 }
 
 // Limite simples por usuário (memória da instância): 12 perguntas/minuto.
@@ -67,6 +155,15 @@ function usuarioDoJwt(req: Request): string {
   }
 }
 
+// Texto livre do lojista: tira caracteres de controle e tentativas de "ignore as regras".
+function limparPergunta(p: unknown): string {
+  return String(p ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/(ignore|desconsidere|esqueça)[^.?!]{0,40}(regras|instru[cç][oõ]es|sistema)/gi, '[removido]')
+    .slice(0, 500)
+    .trim();
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
@@ -83,97 +180,55 @@ Deno.serve(async (req) => {
     return json(400, { erro: 'JSON inválido' });
   }
 
-  const pergunta = String(entrada.pergunta ?? '').slice(0, 500);
+  const pergunta = limparPergunta(entrada.pergunta);
   const snapshotVersion = String(entrada.snapshotVersion ?? '');
   const atualizadoEm = String(entrada.atualizadoEm ?? '');
   if (!pergunta || !snapshotVersion || !atualizadoEm) return json(400, { erro: 'Campos obrigatórios ausentes' });
-  // 501: falta configuração (não adianta o app tentar de novo).
-  if (!API_KEY && !DEEPSEEK_KEY) return json(501, { erro: 'IA não configurada no servidor' });
+
+  const lista = provedores();
+  if (!lista.length) return json(501, { erro: 'IA não configurada no servidor' });
 
   const contexto = JSON.stringify({
     periodo: entrada.periodo ?? null,
     metricas: entrada.metricas ?? {},
+    previsao: entrada.previsao ?? null,
     qualidade: entrada.qualidade ?? {},
   });
-
-  const corpo = JSON.stringify({
-    systemInstruction: { parts: [{ text: SISTEMA }] },
-    contents: [{ role: 'user', parts: [{ text: `PERGUNTA DO LOJISTA: ${pergunta}
-
-DADOS CALCULADOS (única fonte permitida):
-${contexto}` }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 2048, responseMimeType: 'application/json' },
-  });
+  const usuario = `PERGUNTA DO LOJISTA: ${pergunta}\n\nDADOS CALCULADOS em json (única fonte permitida):\n${contexto}`;
 
   // Orçamento total de 15 s (o app desiste em 18 s), dividido entre os provedores.
   const limite = Date.now() + 15_000;
-  let resp: Response | null = null;
+  const tentativas: string[] = [];
   let textoIa: string | null = null;
-  for (const modelo of API_KEY ? MODELOS : []) {
+  let quem = '';
+  for (const [idx, p] of lista.entries()) {
     const restante = limite - Date.now();
     if (restante < 1_500) break;
+    // Cada provedor tem no máximo 7 s (o último usa o que sobrar): um Gemini lento não impede o Groq de responder.
+    const fatia = idx < lista.length - 1 ? Math.min(restante, 7_000) : restante;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), restante);
+    const timer = setTimeout(() => controller.abort(), fatia);
     try {
-      resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': API_KEY! },
-        body: corpo,
-      });
-    } catch {
-      resp = null;
-      break; // Gemini fora/lento: tenta o DeepSeek, se houver
-    } finally {
-      clearTimeout(timer);
-    }
-    if (resp.status !== 404) break; // 404 = modelo aposentado: tenta o próximo
-  }
-  if (resp?.ok) {
-    try {
-      const dados = await resp.json();
-      textoIa = dados?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
-    } catch {
-      textoIa = null;
-    }
-  }
-
-  // Reserva: DeepSeek, se o Gemini não respondeu (ou não está configurado).
-  if (textoIa == null && DEEPSEEK_KEY && limite - Date.now() > 1_500) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), limite - Date.now());
-    try {
-      resp = await fetch('https://api.deepseek.com/chat/completions', {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${DEEPSEEK_KEY}` },
-        body: JSON.stringify({
-          model: DEEPSEEK_MODELO,
-          temperature: 0.2,
-          max_tokens: 1200,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: SISTEMA },
-            { role: 'user', content: `PERGUNTA DO LOJISTA: ${pergunta}\n\nDADOS CALCULADOS (única fonte permitida):\n${contexto}` },
-          ],
-        }),
-      });
-      if (resp.ok) {
-        const dados = await resp.json();
-        textoIa = dados?.choices?.[0]?.message?.content ?? null;
+      textoIa = await p.chamar(SISTEMA, usuario, controller.signal);
+      if (textoIa) {
+        JSON.parse(textoIa); // fora do formato: tenta o próximo
+        quem = p.nome;
+        break;
       }
-    } catch {
-      resp = null;
+      tentativas.push(`${p.nome}:vazio`);
+    } catch (e) {
+      tentativas.push(`${p.nome}:${e instanceof Recusa ? e.status : e instanceof SyntaxError ? 'json' : 'timeout'}`);
+      textoIa = null;
     } finally {
       clearTimeout(timer);
     }
   }
+  // Diagnóstico nos logs da função (sem dados do lojista): mostra por que cada provedor falhou.
+  console.log(JSON.stringify({ ia: quem || 'nenhum', tentativas }));
 
-  if (textoIa == null) {
-    if (!resp) return json(504, { erro: 'Provedor de IA demorou demais ou está fora do ar' });
-    // Chave inválida/revogada (400/401/403) não se resolve tentando de novo.
-    const status = resp.status === 429 ? 429 : resp.status >= 500 ? 503 : 501;
-    return json(status, { erro: 'Provedor de IA recusou a chamada' });
+  if (!textoIa) {
+    const so429 = tentativas.length > 0 && tentativas.every((t) => t.endsWith(':429'));
+    return json(so429 ? 429 : 503, { erro: 'Nenhuma IA respondeu agora', tentativas });
   }
 
   try {
@@ -182,16 +237,17 @@ ${contexto}` }] }],
     for (const [k, v] of Object.entries((saida.metricas ?? {}) as Record<string, unknown>)) {
       if (typeof v === 'number' && Number.isFinite(v)) metricas[k] = v;
     }
-    const lista = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+    const listaStr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 20) : []);
     return json(200, {
       versaoContrato: 'ia-v1',
-      resposta: String(saida.resposta ?? '').trim(),
-      tipo: 'analise',
+      resposta: String(saida.resposta ?? '').trim().slice(0, 900),
+      tipo: saida.tipo === 'fora_do_escopo' ? 'fora_do_escopo' : 'analise',
       periodo: typeof saida.periodo === 'string' ? saida.periodo : null,
       metricas,
-      fontes: lista(saida.fontes),
-      alertas: lista(saida.alertas),
-      dadosAusentes: lista(saida.dadosAusentes),
+      fontes: listaStr(saida.fontes),
+      alertas: listaStr(saida.alertas),
+      dadosAusentes: listaStr(saida.dadosAusentes),
+      provedor: quem,
       // Eco do pedido: o app descarta respostas de snapshot diferente.
       snapshotVersion,
       atualizadoEm,
