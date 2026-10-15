@@ -46,6 +46,19 @@ BEGIN
     coluna_dono := tabela.coluna_dono;
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabela.relname);
 
+    -- RESTRICTIVE precisa de ao menos uma policy PERMISSIVE correspondente.
+    -- Só cria acesso CRUD do próprio usuário se a tabela ainda não tiver
+    -- nenhuma policy permissiva; tabelas já configuradas mantêm seus comandos.
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_policy p
+      WHERE p.polrelid = tabela.oid AND p.polpermissive
+    ) THEN
+      EXECUTE format(
+        'CREATE POLICY seguranca_app_tenant_access ON public.%I AS PERMISSIVE FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
+        tabela.relname, coluna_dono, coluna_dono
+      );
+    END IF;
+
     -- Uma policy RESTRICTIVE combina por AND com as permissivas existentes.
     -- Assim, restringe o tenant sem ampliar operações (p.ex. DELETE de vendas).
     EXECUTE format('DROP POLICY IF EXISTS seguranca_app_tenant ON public.%I', tabela.relname);
