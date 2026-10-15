@@ -56,14 +56,22 @@ function json(status: number, body: unknown, extra: Record<string, string> = {})
 }
 
 class Recusa extends Error {
-  constructor(readonly status: number) {
-    super(`HTTP ${status}`);
+  constructor(readonly status: number, readonly codigo = '') {
+    super(`HTTP ${status} ${codigo}`);
   }
 }
 
 async function postJson(url: string, headers: Record<string, string>, body: unknown, sinal: AbortSignal) {
   const r = await fetch(url, { method: 'POST', signal: sinal, headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Recusa(r.status);
+  if (!r.ok) {
+    // Só o código do erro do provedor (ex.: json_validate_failed, rate_limit_exceeded) vai para o diagnóstico.
+    let codigo = '';
+    try {
+      const e = (await r.json())?.error;
+      codigo = String(e?.code ?? e?.status ?? e?.type ?? '').replace(/[^\w.-]/g, '').slice(0, 40);
+    } catch { /* corpo sem JSON */ }
+    throw new Recusa(r.status, codigo);
+  }
   return await r.json();
 }
 
@@ -87,7 +95,7 @@ function provedores(): Provedor[] {
   if (gemini) {
     // gemini-2.5-flash foi aposentado para contas novas; os "flash" grandes às vezes dão 503 (alta demanda),
     // então a lista desce até os "lite", que quase sempre respondem.
-    const modelos = [env('GEMINI_MODEL'), 'gemini-3.8-flash', 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite']
+    const modelos = [env('GEMINI_MODEL'), 'gemini-3.5-flash', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.8-flash']
       .filter((m, i, a): m is string => !!m && a.indexOf(m) === i);
     lista.push({
       nome: 'gemini',
@@ -217,7 +225,7 @@ Deno.serve(async (req) => {
       }
       tentativas.push(`${p.nome}:vazio`);
     } catch (e) {
-      tentativas.push(`${p.nome}:${e instanceof Recusa ? e.status : e instanceof SyntaxError ? 'json' : 'timeout'}`);
+      tentativas.push(`${p.nome}:${e instanceof Recusa ? `${e.status}${e.codigo ? ':' + e.codigo : ''}` : e instanceof SyntaxError ? 'json' : 'timeout'}`);
       textoIa = null;
     } finally {
       clearTimeout(timer);
@@ -227,7 +235,7 @@ Deno.serve(async (req) => {
   console.log(JSON.stringify({ ia: quem || 'nenhum', tentativas }));
 
   if (!textoIa) {
-    const so429 = tentativas.length > 0 && tentativas.every((t) => t.endsWith(':429'));
+    const so429 = tentativas.length > 0 && tentativas.every((t) => /:429(:|$)/.test(t));
     return json(so429 ? 429 : 503, { erro: 'Nenhuma IA respondeu agora', tentativas });
   }
 
