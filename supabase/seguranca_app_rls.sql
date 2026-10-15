@@ -1,35 +1,33 @@
--- Reforça o isolamento por loja SEM alterar migrations anteriores e SEM afrouxar regras existentes.
+-- Reforça o isolamento por loja SEM alterar migrations anteriores e SEM ampliar permissões.
 --
 -- Modelo do APP-CIC: empresa_id = auth.uid() do lojista (DEFAULT auth.uid() nas tabelas).
--- O que este script faz, para toda tabela pública com empresa_id, user_id ou owner_id:
---   1. liga RLS (se estiver desligado, qualquer usuário logado leria tudo);
---   2. se a tabela NÃO tem nenhuma policy, cria a policy de dono (lê/grava só a própria loja).
--- O que ele NÃO faz (de propósito):
---   - não apaga policies existentes. Ex.: movimentacoes_estoque é um livro-razão só de
---     leitura e inserção; uma policy FOR ALL abriria UPDATE/DELETE e permitiria adulterar
---     o histórico de estoque.
--- Tabelas de negócio sem coluna de dono aparecem como AVISO para revisão manual.
+-- Para toda tabela de negócio com coluna de dono (empresa_id, ou user_id/owner_id em tabelas de negócio):
+--   1. liga RLS;
+--   2. cria `seguranca_app_tenant` AS RESTRICTIVE: combina por AND com as policies que já existem.
+--      Restringe à própria loja sem abrir operações novas (o histórico movimentacoes_estoque
+--      continua só leitura/inserção; DELETE de vendas continua proibido se já era).
+--   3. se a tabela não tem NENHUMA policy permissiva, cria `seguranca_app_dono` (permissiva, só a
+--      própria loja). Sem isso, a RESTRICTIVE sozinha bloquearia até o dono, porque o Postgres
+--      exige ao menos uma policy permissiva para liberar qualquer linha.
+-- Nenhuma policy existente é apagada. Pode rodar mais de uma vez.
 DO $$
 DECLARE
   tabela RECORD;
-<<<<<<< HEAD
   sem_dono TEXT;
-=======
-  coluna_dono TEXT;
->>>>>>> seguranca-codex2
 BEGIN
   SELECT string_agg(c.relname, ', ') INTO sem_dono
   FROM pg_class c
   JOIN pg_namespace n ON n.oid = c.relnamespace
   WHERE n.nspname = 'public'
     AND c.relkind IN ('r', 'p')
-    AND c.relname ~* '(produto|estoque|venda|cliente|caixa|custo|alerta|relatorio|movimentacao)'
+    AND c.relname ~* '(produto|estoque|venda|cliente|caixa|loja|custo|alerta|relatorio|movimentacao)'
     AND NOT EXISTS (
       SELECT 1 FROM pg_attribute a
       WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
         AND a.attname IN ('empresa_id', 'user_id', 'owner_id')
     );
   IF sem_dono IS NOT NULL THEN
+    -- Aviso em vez de abortar: o restante da blindagem é aplicado e a tabela fica para revisão manual.
     RAISE WARNING 'Revise manualmente (tabela de negócio sem coluna de dono): %', sem_dono;
   END IF;
 
@@ -40,7 +38,10 @@ BEGIN
         WHEN bool_or(a.attname = 'user_id') THEN 'user_id'
         ELSE 'owner_id'
       END AS coluna_dono,
-      EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid) AS tem_policy
+      EXISTS (
+        SELECT 1 FROM pg_policy p
+        WHERE p.polrelid = c.oid AND p.polpermissive AND p.polname <> 'seguranca_app_dono'
+      ) AS tem_permissiva
     FROM pg_class c
     JOIN pg_namespace n ON n.oid = c.relnamespace
     JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -54,24 +55,21 @@ BEGIN
     GROUP BY c.oid, c.relname
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabela.relname);
-<<<<<<< HEAD
-    IF NOT tabela.tem_policy THEN
-      EXECUTE format(
-        'CREATE POLICY seguranca_app_tenant ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
-        tabela.relname, tabela.coluna_dono, tabela.coluna_dono
-      );
-      RAISE NOTICE 'Policy de dono criada em %', tabela.relname;
-    END IF;
-=======
 
-    -- Uma policy RESTRICTIVE combina por AND com as permissivas existentes.
-    -- Assim, restringe o tenant sem ampliar operações (p.ex. DELETE de vendas).
     EXECUTE format('DROP POLICY IF EXISTS seguranca_app_tenant ON public.%I', tabela.relname);
     EXECUTE format(
       'CREATE POLICY seguranca_app_tenant ON public.%I AS RESTRICTIVE FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
-      tabela.relname, coluna_dono, coluna_dono
+      tabela.relname, tabela.coluna_dono, tabela.coluna_dono
     );
->>>>>>> seguranca-codex2
+
+    IF NOT tabela.tem_permissiva THEN
+      EXECUTE format('DROP POLICY IF EXISTS seguranca_app_dono ON public.%I', tabela.relname);
+      EXECUTE format(
+        'CREATE POLICY seguranca_app_dono ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
+        tabela.relname, tabela.coluna_dono, tabela.coluna_dono
+      );
+      RAISE NOTICE 'Tabela % não tinha policy permissiva: criada seguranca_app_dono', tabela.relname;
+    END IF;
   END LOOP;
 END;
 $$;
