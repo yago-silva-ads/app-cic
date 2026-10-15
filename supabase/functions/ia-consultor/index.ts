@@ -241,7 +241,7 @@ function castigar(nome: string, e: unknown) {
   if (ms) castigo.set(nome, Date.now() + ms);
 }
 
-// Limite simples por usuário (memória da instância): 12 perguntas/minuto.
+// Reserva local de emergência enquanto a migration da cota persistente não está disponível.
 const janela = new Map<string, number[]>();
 function limitado(chave: string): number {
   const agora = Date.now();
@@ -250,6 +250,31 @@ function limitado(chave: string): number {
   lista.push(agora);
   janela.set(chave, lista);
   return 0;
+}
+
+// O PostgREST usa o JWT do próprio lojista: a função SQL obtém auth.uid() e
+// reserva a vaga atomicamente entre todas as instâncias da Edge Function.
+async function reservarCota(req: Request, uid: string): Promise<number> {
+  const url = env('SUPABASE_URL');
+  const apikey = env('SUPABASE_ANON_KEY');
+  if (!url || !apikey) return limitado(uid);
+  try {
+    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/rpc/reservar_cota_ia`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey,
+        authorization: req.headers.get('authorization') ?? '',
+      },
+      body: JSON.stringify({ p_limite: 12 }),
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!r.ok) return limitado(uid);
+    const espera = await r.json();
+    return Number.isInteger(espera) && espera >= 0 && espera <= 60 ? espera : limitado(uid);
+  } catch {
+    return limitado(uid);
+  }
 }
 
 // Só lojista logado usa a IA: a chave pública (anon) é de todos e não identifica ninguém, então
@@ -297,7 +322,7 @@ Deno.serve(async (req) => {
 
   const uid = await usuarioAutenticado(req);
   if (!uid) return json(401, { erro: 'Entre na sua conta para usar o assistente' });
-  const espera = limitado(uid);
+  const espera = await reservarCota(req, uid);
   if (espera > 0) return json(429, { erro: 'Muitas perguntas seguidas' }, { 'Retry-After': String(espera) });
 
   let entrada: Record<string, unknown>;

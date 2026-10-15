@@ -9,11 +9,20 @@ globalThis.Deno = { serve: (h) => { handler = h; }, env: { get: (k) => envs[k] }
 // Roteiro do fetch: para cada provedor, uma fila de respostas.
 let roteiro = {};
 const chamadas = [];
+let respostaRpc = { status: 200, espera: 0 };
+const chamadasRpc = [];
 globalThis.fetch = async (url, init) => {
   // Supabase Auth falso: só o token "usuario-valido" é de um lojista logado.
   if (url === 'http://sb/auth/v1/user') {
     const ok = (init?.headers?.authorization ?? '') === 'Bearer usuario-valido';
     return new Response(JSON.stringify(ok ? { id: 'u1' } : { msg: 'invalid' }), { status: ok ? 200 : 401 });
+  }
+  if (url === 'http://sb/rest/v1/rpc/reservar_cota_ia') {
+    chamadasRpc.push(init);
+    return new Response(
+      JSON.stringify(respostaRpc.status === 200 ? respostaRpc.espera : { code: 'PGRST202' }),
+      { status: respostaRpc.status },
+    );
   }
   const nome = url.includes('generativelanguage') ? 'gemini' : url.includes('groq') ? 'groq' : 'outro';
   chamadas.push(nome);
@@ -35,7 +44,7 @@ const pedir = async (corpo, extra = {}) => {
     method: 'POST', headers: { authorization: `Bearer ${jwt}`, 'content-type': 'application/json', ...extra },
     body: typeof corpo === 'string' ? corpo : JSON.stringify(corpo),
   }));
-  return { status: r.status, corpo: await r.json() };
+  return { status: r.status, corpo: await r.json(), retryAfter: r.headers.get('retry-after') };
 };
 const base = { pergunta: 'O que repor?', snapshotVersion: 's1', atualizadoEm: '2026-10-15T12:00:00Z',
   metricas: { curvaAbc: { valorLiquidoTotalCentavos: 501600 } } };
@@ -51,6 +60,26 @@ await caso('chave pública (anon) ou token falso não usa a IA: 401', async () =
   const r = await pedir(base, { authorization: 'Bearer chave-anon-publica' });
   assert.equal(r.status, 401);
   assert.equal(chamadas.length, 0, 'nenhum provedor pode ser chamado');
+});
+await caso('RPC persistente libera e recebe o JWT do próprio usuário', async () => {
+  respostaRpc = { status: 200, espera: 0 };
+  chamadasRpc.length = 0;
+  roteiro = { gemini: [ok('Pode repor.')] };
+  const r = await pedir(base);
+  assert.equal(r.status, 200);
+  assert.equal(chamadasRpc.length, 1);
+  assert.equal(chamadasRpc[0].headers.authorization, 'Bearer usuario-valido');
+  assert.equal(chamadasRpc[0].headers.apikey, 'anon');
+  assert.deepEqual(JSON.parse(chamadasRpc[0].body), { p_limite: 12 });
+});
+await caso('RPC persistente devolve espera: 429 sem chamar provedor', async () => {
+  respostaRpc = { status: 200, espera: 37 };
+  chamadas.length = 0;
+  const r = await pedir(base);
+  assert.equal(r.status, 429);
+  assert.equal(r.retryAfter, '37');
+  assert.equal(chamadas.length, 0);
+  respostaRpc = { status: 200, espera: 0 };
 });
 await caso('nome de produto gigante ou com quebra de linha é cortado antes do modelo', async () => {
   let enviado = '';
@@ -109,6 +138,19 @@ await caso('todas as IAs em 429: responde 429 (o app mostra os números calculad
   roteiro = { gemini: [{ status: 429 }], groq: [{ status: 429, codigo: 'rate_limit_exceeded' }] };
   const r = await pedir({ ...base, pergunta: 'outra' });
   assert.ok([429, 503].includes(r.status), 'status ' + r.status);
+});
+await caso('RPC 404 usa limite de 12/minuto em memória', async () => {
+  respostaRpc = { status: 404, espera: 0 };
+  chamadasRpc.length = 0;
+  roteiro = { gemini: [ok('Tudo certo.')], groq: [ok('Tudo certo.')] };
+  for (let i = 0; i < 12; i++) {
+    assert.equal((await pedir({ ...base, pergunta: `pergunta ${i}` })).status, 200);
+  }
+  const bloqueada = await pedir(base);
+  assert.equal(bloqueada.status, 429);
+  assert.ok(Number(bloqueada.retryAfter) >= 1);
+  assert.equal(chamadasRpc.length, 13);
+  respostaRpc = { status: 200, espera: 0 };
 });
 console.log(falhas ? `\n${falhas} falha(s)` : '\nTodos os testes da Edge passaram.');
 process.exit(falhas ? 1 : 0);
