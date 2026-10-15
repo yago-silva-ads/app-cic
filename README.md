@@ -152,13 +152,15 @@ flutter build ipa --release --obfuscate --split-debug-info=build/symbols/ios --d
 
 ## Tutoriais em vídeo
 
-O material para gravação e edição está em [docs/tutorial](docs/tutorial/):
+**Assista:** [treinamento completo e os 11 módulos narrados](https://github.com/yago-silva-ads/app-cic/releases/tag/tutoriais)
+(loja de demonstração, dados fictícios), mais um vídeo vertical de divulgação.
+
+O material de produção está em [docs/tutorial](docs/tutorial/):
 
 - [Roteiro de treinamento](docs/tutorial/roteiro.md), com cenas e narração por módulo.
 - [Artes dos vídeos](docs/tutorial/arte/): abertura, encerramento, capas e post de divulgação.
 - [Gerador das artes](docs/tutorial/arte/gerar_arte.py), para reproduzir os PNGs com Python e Pillow.
-
-Use a loja de demonstração para gravar sem expor dados reais. Esses arquivos são material de produção; não representam vídeos já publicados.
+- [Ferramentas de gravação](docs/tutorial/ferramentas/): grava as telas, narra em pt-BR e monta os vídeos.
 
 ## Telas
 
