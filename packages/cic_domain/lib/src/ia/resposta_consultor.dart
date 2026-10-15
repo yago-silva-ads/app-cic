@@ -3,7 +3,7 @@ library;
 
 const String versaoContratoIa = 'ia-v1';
 
-enum TipoResposta { objetiva, lista, analise, indisponivel }
+enum TipoResposta { objetiva, lista, analise, indisponivel, foraDoEscopo }
 
 /// De onde veio o texto. Rastreável e visível: fallback nunca se passa por IA.
 enum OrigemResposta { deterministica, ia, fallbackSeguro }
@@ -59,8 +59,13 @@ class RespostaConsultor {
     }
 
     final metricas = json['metricas'] ?? const {};
-    if (metricas is! Map || metricas.values.any((v) => v is! num)) {
+    if (metricas is! Map ||
+        metricas.keys.any((k) => k is! String) ||
+        metricas.values.any((v) => v is! num || !v.isFinite)) {
       throw const FormatException('Campo "metricas" deve mapear nome → número');
+    }
+    if (json['periodo'] != null && json['periodo'] is! String) {
+      throw const FormatException('Campo "periodo" deve ser string ou null');
     }
     final tipo = campo<String>('tipo');
     final atualizadoEm = DateTime.tryParse(campo<String>('atualizadoEm'));
@@ -70,7 +75,7 @@ class RespostaConsultor {
     return RespostaConsultor(
       resposta: resposta,
       tipo: TipoResposta.values.firstWhere(
-        (t) => t.name == tipo,
+        (t) => t.name == tipo || (tipo == 'fora_do_escopo' && t == TipoResposta.foraDoEscopo),
         orElse: () => throw FormatException('Tipo desconhecido: $tipo'),
       ),
       origem: OrigemResposta.ia,

@@ -2,6 +2,7 @@ import 'package:cic_domain/cic_domain.dart' as dom;
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/config.dart';
 import '../core/theme.dart';
 import '../data/conta.dart';
 import '../data/models.dart';
@@ -31,6 +32,9 @@ class AppState extends ChangeNotifier {
   int _geracao = 0;
 
   Usuario? get usuario {
+    if (Config.demo) {
+      return Usuario(id: 'demo', email: 'demo@app-cic', nome: 'Ana', lojaNome: 'Mercadinho Bom Preço');
+    }
     final u = Supabase.instance.client.auth.currentUser;
     if (u == null) return null;
     final meta = u.userMetadata ?? const {};

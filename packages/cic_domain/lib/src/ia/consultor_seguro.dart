@@ -226,16 +226,25 @@ class ConsultorSeguro {
       );
       return resposta;
     } on ErroIa catch (e) {
-      registrar?.call(
-        RegistroChamadaIa(
-          requestId: requestId,
-          duracao: cronometro.elapsed,
-          origem: OrigemResposta.fallbackSeguro,
-          erro: e.toString(),
-        ),
-      );
+      try {
+        registrar?.call(
+          RegistroChamadaIa(
+            requestId: requestId,
+            duracao: cronometro.elapsed,
+            origem: OrigemResposta.fallbackSeguro,
+            erro: e.toString(),
+          ),
+        );
+      } catch (_) {
+        // Uma falha de telemetria não pode impedir o fallback.
+      }
       return fallback.comAviso(
         '${e.mensagemUsuario} Mostrando só os dados calculados.',
+        origem: OrigemResposta.fallbackSeguro,
+      );
+    } catch (_) {
+      return fallback.comAviso(
+        'Não foi possível concluir a análise. Mostrando só os dados calculados.',
         origem: OrigemResposta.fallbackSeguro,
       );
     }

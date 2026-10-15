@@ -51,5 +51,33 @@ um baixo número de itens no estoque, seu potencial de venda comparado com o cus
 
 O intuito desta página é que o usuário registre os custos fixos operacionais de seu estabelecimento, tendo a opção de rotulá-los e somá-los.
 
+## Segurança e builds de publicação
+
+O app contém somente a chave pública `anon` do Supabase. Chaves `service_role` e
+de provedores de IA devem ficar em secrets no servidor, nunca em `--dart-define`
+nem no código Flutter. O build da Vercel remove arquivos `.map` do artefato web.
+
+Para aplicar o isolamento multi-loja, revise e execute
+`supabase/seguranca_app_rls.sql` no SQL Editor do projeto Supabase. A migration
+falha se encontrar uma tabela de negócio sem `empresa_id`, `user_id` ou
+`owner_id` associado a `auth.uid()`.
+
+Builds móveis de release usam obfuscação e geram símbolos separados:
+
+```sh
+bash tool/build_mobile.sh android
+bash tool/build_mobile.sh ios
+```
+
+O build de iOS precisa rodar no macOS com Xcode. Guarde `build/symbols/` em local
+privado e junto da versão publicada; os arquivos são necessários para decodificar
+relatórios de falha e não devem ser distribuídos com o app.
+
+No painel Supabase, mantenha a confirmação de e-mail habilitada em
+Authentication / Providers / Email, configure senha mínima de 12 caracteres com
+letras maiúsculas, minúsculas e números, e ajuste limites de envio/login em
+Authentication / Rate Limits. O bloqueio no app é apenas uma camada de interface
+e não substitui o limite do servidor.
+
 
 

@@ -5,6 +5,7 @@ import 'package:app_cic/core/pix.dart';
 import 'package:app_cic/core/theme.dart';
 import 'package:app_cic/data/models.dart';
 import 'package:app_cic/data/repository.dart';
+import 'package:app_cic/data/repository_demo.dart';
 import 'package:app_cic/services/ia_consultor.dart';
 import 'package:app_cic/state/app_state.dart';
 import 'package:cic_domain/cic_domain.dart' as dom;
@@ -222,5 +223,68 @@ void main() {
     final t = montarAuditoria(e);
     expect(t, contains('ALERTA'));
     expect(t, contains('R\$ 1.000,00'));
+  });
+
+  group('perguntas da apresentação (loja de demonstração)', () {
+    test('cada pergunta recebe resposta calculada e específica, sem IA', () async {
+      final e = AppState(repo: DemoRepository(), tema: TemaController());
+      await e.carregar();
+      final ia = IaConsultor(e);
+      final esperado = <String, String>{
+        'O que está com poucas unidades?': 'poucas unidades',
+        'Quais produtos estão perto de vencer?': 'validade',
+        'Como está o retorno deste produto?': 'Me diga o nome do produto',
+        'Como está o retorno do Leite Integral?': 'lucro de',
+        'Quanto preciso vender para cobrir os custos?': 'para empatar',
+        'O que no meu estoque precisa de atenção agora?': 'atenção agora',
+        'Estou vendendo bastante. Será que estou ganhando dinheiro?': 'lucro bruto',
+        'Quais produtos dão mais retorno e o que devo repor?': 'Lista de compras',
+        'O que faço agora para cuidar melhor do meu negócio?': 'atenção agora',
+      };
+      for (final MapEntry(key: pergunta, value: trecho) in esperado.entries) {
+        final r = (await ia.perguntar(pergunta))!;
+        // ignore: avoid_print
+        print('> $pergunta\n${r.resposta}\n');
+        expect(r.origem, dom.OrigemResposta.deterministica, reason: pergunta);
+        expect(r.resposta, contains(trecho), reason: pergunta);
+      }
+    });
+  });
+
+  group('auditoria do Codex (app)', () {
+    test('vendas não carregaram: não analisa lucro, mas responde validade', () async {
+      final e = _estado()
+        ..estoque = [_p('1', 'Leite', 3, 4, 6, validade: DateTime.now().add(const Duration(days: 2)))]
+        ..erros['vendas'] = 'falhou';
+      final ia = IaConsultor(e);
+      expect((await ia.perguntar('Estou ganhando dinheiro?'))!.tipo, dom.TipoResposta.indisponivel);
+      expect((await ia.perguntar('Quais produtos estão perto de vencer?'))!.resposta, contains('Leite'));
+    });
+
+    test('vencido aparece mesmo com muitos zerados; zerado sem vendas não vira "nada urgente"', () async {
+      final e = _estado()
+        ..estoque = [
+          for (var i = 0; i < 7; i++) _p('z$i', 'Zerado $i', 0, 1, 2),
+          _p('v', 'Iogurte', 5, 1, 2, validade: DateTime.now().subtract(const Duration(days: 3))),
+        ];
+      final r = (await IaConsultor(e).perguntar('O que precisa de atenção agora?'))!.resposta;
+      expect(r, contains('Iogurte: VENCIDO'));
+      expect(r, contains('ZERADO'));
+    });
+
+    test('"sal" não encontra "Salgadinho"', () async {
+      final e = _estado()..estoque = [_p('1', 'Salgadinho', 5, 1, 2)];
+      final r = (await IaConsultor(e).perguntar('tem sal?'))!.resposta;
+      expect(r, isNot(contains('Salgadinho:')));
+    });
+
+    test('lucro fala "últimos 30 dias", nunca "este mês"', () async {
+      final e = _estado()
+        ..estoque = [_p('1', 'Cerveja', 5, 2, 5)]
+        ..vendas = [VendaItemHistorico(id: 'a', vendaId: 'v', produtoCodigo: '1', nomeProduto: 'Cerveja', quantidade: 4, valorUnitario: 5, custoUnitario: 2, data: DateTime.now())];
+      final r = (await IaConsultor(e).perguntar('Estou ganhando dinheiro?'))!.resposta;
+      expect(r, contains('últimos 30 dias'));
+      expect(r, isNot(contains('este mês')));
+    });
   });
 }

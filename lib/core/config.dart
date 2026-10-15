@@ -16,5 +16,8 @@ class Config {
   );
 
   /// Endpoint da Edge Function de IA (a chave do Gemini fica no servidor).
+  /// `--dart-define=DEMO=true`: loja de exemplo em memória, sem login (tutoriais e teste do cliente).
+  static const demo = bool.fromEnvironment('DEMO');
+
   static String get iaFunctionUrl => '$supabaseUrl/functions/v1/ia-consultor';
 }
