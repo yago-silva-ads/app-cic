@@ -25,7 +25,7 @@ enum NavTab {
   xml('Importador XML (NF-e)', 'Importador de XML (NF-e / NFC-e SEFAZ)', LucideIcons.fileSpreadsheet),
   estoque('Estoque Atual', 'Inventário & Controle de Estoque', LucideIcons.boxes),
   movimentacoes('Histórico & Movimentações', 'Histórico de Entradas & Saídas', LucideIcons.arrowDownUp),
-  inteligencia('Inteligência IA', 'Consultoria Preditiva com IA Gemini', LucideIcons.sparkles),
+  inteligencia('Inteligência IA', 'Consultoria Preditiva com IA', LucideIcons.sparkles),
   custos('Custos & Despesas', 'Custos Fixos & Despesas Variáveis', LucideIcons.dollarSign),
   alertas('Central de Alertas', 'Central de Alertas & Notificações', LucideIcons.bell),
   pdv('Frente de Caixa (PDV)', 'Frente de Caixa (PDV Ágil)', LucideIcons.shoppingCart),

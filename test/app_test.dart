@@ -5,6 +5,7 @@ import 'package:app_cic/core/pix.dart';
 import 'package:app_cic/core/theme.dart';
 import 'package:app_cic/data/models.dart';
 import 'package:app_cic/data/repository.dart';
+import 'package:app_cic/data/repository_demo.dart';
 import 'package:app_cic/services/ia_consultor.dart';
 import 'package:app_cic/state/app_state.dart';
 import 'package:cic_domain/cic_domain.dart' as dom;
@@ -222,5 +223,31 @@ void main() {
     final t = montarAuditoria(e);
     expect(t, contains('ALERTA'));
     expect(t, contains('R\$ 1.000,00'));
+  });
+
+  group('perguntas da apresentação (loja de demonstração)', () {
+    test('cada pergunta recebe resposta calculada e específica, sem IA', () async {
+      final e = AppState(repo: DemoRepository(), tema: TemaController());
+      await e.carregar();
+      final ia = IaConsultor(e);
+      final esperado = <String, String>{
+        'O que está com poucas unidades?': 'poucas unidades',
+        'Quais produtos estão perto de vencer?': 'validade',
+        'Como está o retorno deste produto?': 'Me diga o nome do produto',
+        'Como está o retorno do Leite Integral?': 'lucro de',
+        'Quanto preciso vender para cobrir os custos?': 'para empatar',
+        'O que no meu estoque precisa de atenção agora?': 'atenção agora',
+        'Estou vendendo bastante. Será que estou ganhando dinheiro?': 'lucro bruto',
+        'Quais produtos dão mais retorno e o que devo repor?': 'Lista de compras',
+        'O que faço agora para cuidar melhor do meu negócio?': 'atenção agora',
+      };
+      for (final MapEntry(key: pergunta, value: trecho) in esperado.entries) {
+        final r = (await ia.perguntar(pergunta))!;
+        // ignore: avoid_print
+        print('> $pergunta\n${r.resposta}\n');
+        expect(r.origem, dom.OrigemResposta.deterministica, reason: pergunta);
+        expect(r.resposta, contains(trecho), reason: pergunta);
+      }
+    });
   });
 }

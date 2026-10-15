@@ -42,7 +42,7 @@ class _SuporteScreenState extends State<SuporteScreen> {
   List<_Check> _novos() => [
     _Check('Banco de dados (Supabase)', 'Leitura do seu estoque com a sua sessão'),
     _Check('Atualização v3 do banco', 'Venda atômica, código único por loja e movimentações'),
-    _Check('Consultor de IA', 'Função segura que fala com o Gemini'),
+    _Check('Consultor de IA', 'Função segura que fala com as IAs (Gemini, Groq)'),
     _Check('Sessão e isolamento', 'Dados presos à sua loja pela sessão'),
   ];
 

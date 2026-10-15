@@ -136,7 +136,7 @@ class IaConsultor {
       add(i.produtoId, '- ${i.nome}: ${i.estoque} un paradas, sem venda em ${prev.diasJanela} dias. Faça combo ou promoção.');
     }
     for (final p in estado.estoque.where((p) => p.markup < 1.3 && p.quantidade > 0)) {
-      add(p.codigo, '- ${p.nome}: margem baixa (markup ${p.markup.toStringAsFixed(2)}x). Revise o preço.');
+      add(p.codigo, '- ${p.nome}: margem baixa (markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x). Revise o preço.');
     }
     if (linhas.isEmpty) {
       return _local('Nada urgente agora: nenhum produto zerado, vencendo, acabando ou abaixo do mínimo.');
@@ -183,6 +183,55 @@ class IaConsultor {
         tipo: dom.TipoResposta.lista, fontes: [for (final i in lista.take(8)) i.produtoId]);
   }
 
+  /// "Estou ganhando dinheiro?": lucro bruto das vendas do mês menos os custos cadastrados da loja.
+  dom.RespostaConsultor _ganhando() {
+    final abc = estado.curvaAbc(dom.PeriodoAbc.mes);
+    final fat = abc.valorLiquidoTotalCentavos;
+    final lucro = abc.lucroBrutoTotalCentavos;
+    if (fat <= 0) return _local('Ainda não há vendas registradas este mês para eu dizer se você está ganhando dinheiro.');
+    if (lucro == null) {
+      return _local('Você vendeu ${brl(fat / 100)} este mês, mas falta o custo de compra de alguns produtos. '
+          'Cadastre o custo deles para eu calcular o lucro.');
+    }
+    final custos = estado.custos.fold<int>(0, (s, k) => s + centavos(k.valor));
+    final base = 'Este mês você vendeu ${brl(fat / 100)} e o lucro bruto (venda menos o custo dos produtos) foi ${brl(lucro / 100)}';
+    if (custos == 0) {
+      return _local('$base. Cadastre aluguel, energia e outras despesas em "Custos & Despesas" para eu dizer se sobra dinheiro no fim do mês.');
+    }
+    final sobra = lucro - custos;
+    return _local(sobra >= 0
+        ? '$base. Tirando as despesas da loja (${brl(custos / 100)}), sobram ${brl(sobra / 100)}: sim, você está ganhando dinheiro.'
+        : '$base. As despesas da loja somam ${brl(custos / 100)}, então ainda faltam ${brl(-sobra / 100)} para cobrir tudo. '
+            'Foque nos produtos de maior retorno e evite estoque parado.');
+  }
+
+  /// "Como está o retorno": por produto citado (custo, venda, lucro por unidade) ou o ranking do mês.
+  dom.RespostaConsultor _retorno(String t, List<Produto> citados) {
+    if (citados.isNotEmpty) {
+      final linhas = [
+        for (final p in citados.take(4))
+          '- ${p.nome}: custa ${brl(p.valorCompra)}, vende a ${brl(p.valorVenda)}, lucro de ${brl(p.lucroUnitario)} por unidade '
+              '(markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x)${p.markup < 1.3 ? '. Margem baixa: revise o preço' : ''}.',
+      ];
+      return _local(linhas.join('\n'), tipo: dom.TipoResposta.lista, fontes: [for (final p in citados.take(4)) p.codigo]);
+    }
+    final top = estado.curvaAbc(dom.PeriodoAbc.mes).itens.where((i) => (i.lucroBrutoCentavos ?? 0) > 0).toList()
+      ..sort((a, b) => b.lucroBrutoCentavos!.compareTo(a.lucroBrutoCentavos!));
+    if (top.isEmpty) return _local('Ainda não há vendas com custo cadastrado neste mês para comparar o retorno dos produtos.');
+    final linhas = [for (final i in top.take(5)) '- ${i.nome}: lucro bruto de ${brl(i.lucroBrutoCentavos! / 100)} em ${i.quantidade} un vendidas.'];
+    final pediuUm = RegExp(r'deste|desse|daquele|este produto|esse produto').hasMatch(t);
+    return _local('${pediuUm ? 'Me diga o nome do produto para eu detalhar. ' : ''}Produtos que mais deram retorno este mês:\n${linhas.join('\n')}',
+        tipo: dom.TipoResposta.lista, fontes: [for (final i in top.take(5)) i.produtoId]);
+  }
+
+  dom.RespostaConsultor _baixos() {
+    final baixos = estado.estoque.where((p) => p.estoqueBaixo).toList()..sort((a, b) => a.quantidade.compareTo(b.quantidade));
+    if (baixos.isEmpty) return _local('Nenhum produto está no estoque mínimo ou abaixo.');
+    final linhas = [for (final p in baixos.take(8)) '- ${p.nome}: ${p.quantidade} un (mínimo ${p.estoqueMinimo}).'];
+    return _local('Produtos com poucas unidades (${baixos.length}):\n${linhas.join('\n')}',
+        tipo: dom.TipoResposta.lista, fontes: [for (final p in baixos.take(8)) p.codigo]);
+  }
+
   /// Resposta calculada (sem IA) ou null se a pergunta é aberta.
   dom.RespostaConsultor? _objetiva(String pergunta) {
     final t = _norm(pergunta);
@@ -199,7 +248,22 @@ class IaConsultor {
           tipo: dom.TipoResposta.indisponivel);
     }
 
+    // Pergunta composta ("o que dá mais retorno e o que devo repor?"): responde as duas partes.
+    final querRetorno = RegExp(r'retorno|margem|lucr|rende|rentab').hasMatch(t);
+    if (querRetorno && RegExp(r'repor|reposic|comprar|pedir').hasMatch(t)) {
+      final a = _retorno(t, const []), b = _reposicao(_previsao(), const []);
+      return _local('${a.resposta}\n\n${b.resposta}', tipo: dom.TipoResposta.lista, fontes: {...a.fontes, ...b.fontes}.toList());
+    }
+    if (RegExp(r'ganhando|tendo lucro|dando lucro|lucrando|sobra dinheiro|perdendo dinheiro|no prejuizo|no vermelho|'
+            r'(meu|o) lucro( total| do mes| deste mes| este mes| esse mes)?( foi| e)?$|quanto (eu )?lucrei')
+        .hasMatch(t.replaceAll(RegExp(r'[?!. ]+$'), ''))) {
+      return _ganhando();
+    }
+    if (RegExp(r'poucas? unidades|pouco estoque|pouca quantidade|estoque baixo|baixo estoque|quase (acabando|no fim)').hasMatch(t)) {
+      return _baixos();
+    }
     if (RegExp(r'atencao|prioridad|priorizar|preocup|urgent|cuidado|risco|problema|o que (eu )?(devo|preciso) (fazer|olhar|resolver|ver)|'
+            r'o que (eu )?faco|por onde comec|proximo passo|cuidar (melhor )?d|'
             r'resumo do dia|como (esta|anda) (a loja|meu estoque|o estoque)')
         .hasMatch(t)) {
       return _atencao(_previsao());
@@ -234,6 +298,9 @@ class IaConsultor {
     }
 
     final achados = _buscarProdutos(t);
+    final cobrirCustos = t.contains('equilibrio') ||
+        RegExp(r'cobrir (os |meus |minhas |as )?(custos|gastos|despesas|contas)|pagar (as |minhas )?(contas|despesas)|empatar').hasMatch(t);
+    if (querRetorno && !cobrirCustos && !RegExp(r'margem baixa|markup').hasMatch(t)) return _retorno(t, achados);
     if (achados.isNotEmpty) {
       final linhas = [
         for (final p in achados.take(6))
@@ -247,21 +314,18 @@ class IaConsultor {
     }
 
 
-    if (RegExp(r'acabando|acaba|estoque baixo|baixo estoque|falta|ruptura|repor|reposicao|esgotando|zerad').hasMatch(t)) {
-      final baixos = estado.estoque.where((p) => p.estoqueBaixo).toList()..sort((a, b) => a.quantidade.compareTo(b.quantidade));
-      if (baixos.isEmpty) return _local('Nenhum produto está no estoque mínimo ou abaixo.');
-      final linhas = [for (final p in baixos.take(8)) '- ${p.nome}: ${p.quantidade} un (mínimo ${p.estoqueMinimo}).'];
-      return _local('Produtos para repor (${baixos.length}):\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: [for (final p in baixos.take(8)) p.codigo]);
+    if (RegExp(r'acabando|acaba|falta|ruptura|repor|reposicao|esgotando|zerad').hasMatch(t)) {
+      return _baixos();
     }
 
-    if (RegExp(r'markup|margem baixa|prejuizo|abaixo de 1').hasMatch(t) && !t.contains('equilibrio')) {
+    if (RegExp(r'markup|margem baixa|prejuizo|abaixo de 1').hasMatch(t) && !cobrirCustos) {
       final ruins = estado.estoque.where((p) => p.markup < 1.3).toList();
       if (ruins.isEmpty) return _local('Nenhum produto está com markup abaixo de 1,30x.');
-      final linhas = [for (final p in ruins.take(8)) '- ${p.nome}: markup ${p.markup.toStringAsFixed(2)}x (custo ${brl(p.valorCompra)}, venda ${brl(p.valorVenda)}).'];
+      final linhas = [for (final p in ruins.take(8)) '- ${p.nome}: markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x (custo ${brl(p.valorCompra)}, venda ${brl(p.valorVenda)}).'];
       return _local('Produtos com markup abaixo de 1,30x (${ruins.length}):\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: [for (final p in ruins.take(8)) p.codigo]);
     }
 
-    if (t.contains('equilibrio')) {
+    if (cobrirCustos) {
       var custo = 0, retorno = 0;
       for (final p in estado.estoque) {
         custo += centavos(p.valorCompra) * p.quantidade;
@@ -274,7 +338,7 @@ class IaConsultor {
       final margem = lucro / retorno;
       final meta = fixos / 100 / margem;
       return _local(
-        'Seus custos mensais somam ${brl(fixos / 100)}. Com a margem bruta projetada do estoque (${(margem * 100).toStringAsFixed(1)}%), '
+        'Seus custos mensais somam ${brl(fixos / 100)}. Com a margem bruta projetada do estoque (${(margem * 100).toStringAsFixed(1).replaceAll('.', ',')}%), '
         'você precisa vender ${brl(meta)} por mês para empatar.',
       );
     }
@@ -363,15 +427,16 @@ class IaConsultor {
   }
 
   Future<Object?> _chamarServidor(dom.ConsultaIa consulta) async {
-    final sessao = Supabase.instance.client.auth.currentSession;
-    if (sessao == null) throw const dom.ProvedorIndisponivelIa('sem sessão', retentavel: false);
+    // Na demonstração não há login: a função aceita a chave pública (com o limite por minuto dela).
+    final token = Supabase.instance.client.auth.currentSession?.accessToken ?? (Config.demo ? Config.supabaseAnonKey : null);
+    if (token == null) throw const dom.ProvedorIndisponivelIa('sem sessão', retentavel: false);
     final http.Response r;
     try {
       r = await http.post(
         Uri.parse(Config.iaFunctionUrl),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${sessao.accessToken}',
+          'Authorization': 'Bearer $token',
           'apikey': Config.supabaseAnonKey,
         },
         // Sem tenantId: o servidor usa a loja do JWT.
@@ -426,7 +491,7 @@ String montarAuditoria(AppState e) {
     b.writeln('- Custos mensais: ${brl(totalCustos / 100)} (fixos ${brl(fixos / 100)}, variáveis ${brl(variaveis / 100)}).');
     if (retorno > 0 && lucro > 0) {
       final margem = lucro / retorno;
-      b.writeln('- Margem bruta projetada: ${(margem * 100).toStringAsFixed(1)}%. Meta de vendas para empatar: ${brl(totalCustos / 100 / margem)} por mês.');
+      b.writeln('- Margem bruta projetada: ${(margem * 100).toStringAsFixed(1).replaceAll('.', ',')}%. Meta de vendas para empatar: ${brl(totalCustos / 100 / margem)} por mês.');
     }
     if (lucro < totalCustos) {
       b.writeln('- ALERTA: o lucro bruto projetado do estoque (${brl(lucro / 100)}) não cobre os custos mensais. Faltam ${brl((totalCustos - lucro) / 100)}.');
@@ -453,7 +518,7 @@ String montarAuditoria(AppState e) {
     b.writeln('- Estoque baixo: ${p.nome} com ${p.quantidade} un (mínimo ${p.estoqueMinimo}).');
   }
   for (final p in margemBaixa.take(5)) {
-    b.writeln('- Margem baixa: ${p.nome} com markup ${p.markup.toStringAsFixed(2)}x (abaixo de 1,30x).');
+    b.writeln('- Margem baixa: ${p.nome} com markup ${p.markup.toStringAsFixed(2).replaceAll('.', ',')}x (abaixo de 1,30x).');
   }
 
   b.writeln('\n## 4. Curva ABC (vendas dos últimos 30 dias)');

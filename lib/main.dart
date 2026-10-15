@@ -7,6 +7,7 @@ import 'app/shell.dart';
 import 'core/config.dart';
 import 'core/theme.dart';
 import 'data/auth_service.dart';
+import 'data/repository_demo.dart';
 import 'screens/auth_screen.dart';
 import 'state/app_state.dart';
 
@@ -77,7 +78,7 @@ class _PorteiroState extends State<_Porteiro> {
   AppState _estadoPara(String uid) {
     if (_uid != uid) {
       _estado?.dispose();
-      _estado = AppState(tema: widget.tema);
+      _estado = AppState(tema: widget.tema, repo: Config.demo ? DemoRepository() : null);
       _uid = uid;
     }
     return _estado!;
@@ -85,6 +86,7 @@ class _PorteiroState extends State<_Porteiro> {
 
   @override
   Widget build(BuildContext context) {
+    if (Config.demo) return AppShell(estado: _estadoPara('demo'), auth: _auth);
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, _) {

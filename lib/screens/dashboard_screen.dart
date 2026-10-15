@@ -192,7 +192,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  label: Text(_rotulos[p]!, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _periodo == p ? Colors.black : c.textSoft)),
+                  // softWrap/visible: o rótulo era cortado com degradê ("Hoj", "7 dia") no navegador.
+                  label: Text(_rotulos[p]!, softWrap: false, overflow: TextOverflow.visible,
+                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: _periodo == p ? Colors.black : c.textSoft)),
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 10),
                   selected: _periodo == p,
                   selectedColor: c.botao,
                   backgroundColor: c.sub,
