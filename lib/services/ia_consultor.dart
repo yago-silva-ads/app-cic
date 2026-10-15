@@ -87,15 +87,130 @@ class IaConsultor {
     return [for (final e in pontuados) if (e.$2 == melhor) e.$1];
   }
 
+  /// Previsão de demanda: média móvel dos últimos 30 dias de vendas reais.
+  dom.ResultadoPrevisao _previsao() => const dom.PrevisaoDemanda().calcular(estado.curvaAbc(dom.PeriodoAbc.mes));
+
+  static String _un(double v) {
+    final s = v.toStringAsFixed(1).replaceAll('.', ',');
+    return s.endsWith(',0') ? s.substring(0, s.length - 2) : s;
+  }
+
+  static final _reNegocio = RegExp(
+      r'estoq|produt|vend|fatur|lucr|margem|markup|preco|custo|despes|caixa|client|compr|repor|reposic|fornec|promoc|descont|'
+      r'valid|venc|abc|curva|ticket|loja|negoc|comerc|mercad|item|itens|unidade|saldo|falt|acab|giro|pedido|receita|dinheiro|'
+      r'ganh|gast|pagar|conta|equilibrio|meta|cresc|aument|atencao|prioridad|previs|demanda|parad|encalh|semana|mes|hoje|ontem');
+  static final _reForaDoEscopo = RegExp(
+      r'piada|futebol|jogo d|clima|previsao do tempo|quem (e|foi|ganhou)|capital d|politic|eleic|filme|serie|musica|namor|'
+      r'horoscopo|signo|traduz|poema|redacao|escreva um|receita de (bolo|comida)|programa(r|cao)|codigo|bitcoin|cripto');
+
+  /// Só recusa o que é claramente outro assunto; o resto segue (a IA também tem a regra).
+  bool _foraDoEscopo(String t) => !_reNegocio.hasMatch(t) && _reForaDoEscopo.hasMatch(t);
+
+  /// "O que precisa de atenção": tudo que é urgente, do mais grave ao mais leve, com a ação.
+  dom.RespostaConsultor _atencao(dom.ResultadoPrevisao prev) {
+    final linhas = <String>[], fontes = <String>[];
+    void add(String id, String linha) {
+      if (linhas.length < 6 && !fontes.contains(id)) {
+        linhas.add(linha);
+        fontes.add(id);
+      }
+    }
+
+    for (final i in prev.de(dom.SituacaoPrevisao.ruptura)) {
+      add(i.produtoId, '- ${i.nome}: ZERADO e vendia ${_un(i.mediaDiaria)} un/dia. Reponha já (${i.reposicaoSugerida} un para ${prev.diasAlvo} dias).');
+    }
+    for (final p in estado.estoque.where((p) => (p.diasParaVencer ?? 9999) < 0)) {
+      add(p.codigo, '- ${p.nome}: VENCIDO (${p.quantidade} un). Retire do ponto de venda.');
+    }
+    for (final i in prev.de(dom.SituacaoPrevisao.critico)) {
+      add(i.produtoId, '- ${i.nome}: acaba em ${i.coberturaDias} dia(s) no ritmo atual. Compre ${i.reposicaoSugerida} un.');
+    }
+    for (final p in estado.estoque.where((p) => (p.diasParaVencer ?? 9999) >= 0 && (p.diasParaVencer ?? 9999) <= 7)) {
+      add(p.codigo, '- ${p.nome}: vence em ${p.diasParaVencer} dia(s) (${p.quantidade} un). Faça promoção.');
+    }
+    for (final p in estado.estoque.where((p) => p.estoqueBaixo && p.quantidade > 0)) {
+      add(p.codigo, '- ${p.nome}: ${p.quantidade} un, abaixo do mínimo de ${p.estoqueMinimo}.');
+    }
+    final parados = prev.de(dom.SituacaoPrevisao.parado).toList()..sort((a, b) => (b.estoque ?? 0).compareTo(a.estoque ?? 0));
+    for (final i in parados.take(2)) {
+      add(i.produtoId, '- ${i.nome}: ${i.estoque} un paradas, sem venda em ${prev.diasJanela} dias. Faça combo ou promoção.');
+    }
+    for (final p in estado.estoque.where((p) => p.markup < 1.3 && p.quantidade > 0)) {
+      add(p.codigo, '- ${p.nome}: margem baixa (markup ${p.markup.toStringAsFixed(2)}x). Revise o preço.');
+    }
+    if (linhas.isEmpty) {
+      return _local('Nada urgente agora: nenhum produto zerado, vencendo, acabando ou abaixo do mínimo.');
+    }
+    return _local('O que precisa da sua atenção agora:\n${linhas.join('\n')}', tipo: dom.TipoResposta.lista, fontes: fontes);
+  }
+
+  /// "Quando acaba / quanto comprar": cobertura em dias e reposição para o horizonte.
+  dom.RespostaConsultor _reposicao(dom.ResultadoPrevisao prev, List<Produto> citados) {
+    final ids = {for (final p in citados) p.codigo};
+    if (ids.isNotEmpty) {
+      final linhas = <String>[];
+      for (final i in prev.itens.where((i) => ids.contains(i.produtoId))) {
+        linhas.add(switch (i.situacao) {
+          dom.SituacaoPrevisao.semDados => '- ${i.nome}: não sei o saldo atual, então não dá para prever.',
+          dom.SituacaoPrevisao.parado => '- ${i.nome}: ${i.estoque} un e nenhuma venda em ${prev.diasJanela} dias; não precisa comprar.',
+          dom.SituacaoPrevisao.ruptura => '- ${i.nome}: zerado; vende ${_un(i.mediaDiaria)} un/dia. Compre ${i.reposicaoSugerida} un para ${prev.diasAlvo} dias.',
+          _ when i.vendidosNoPeriodo == 0 => '- ${i.nome}: sem vendas em ${prev.diasJanela} dias.',
+          _ => '- ${i.nome}: acaba em ${i.coberturaDias} dia(s) (vende ${_un(i.mediaDiaria)} un/dia). '
+              '${i.reposicaoSugerida > 0 ? 'Compre ${i.reposicaoSugerida} un para ${prev.diasAlvo} dias.' : 'Não precisa comprar agora.'}',
+        });
+      }
+      if (linhas.isNotEmpty) {
+        return _local(linhas.join('\n'), tipo: dom.TipoResposta.lista, fontes: ids.toList());
+      }
+    }
+    final comprar = prev.itens.where((i) => i.reposicaoSugerida > 0).take(8).toList();
+    if (comprar.isEmpty) {
+      return _local('Pelo ritmo de vendas dos últimos ${prev.diasJanela} dias, nenhum produto precisa de reposição para os próximos ${prev.diasAlvo} dias.');
+    }
+    final linhas = [
+      for (final i in comprar)
+        '- ${i.nome}: ${i.situacao == dom.SituacaoPrevisao.ruptura ? 'zerado' : 'acaba em ${i.coberturaDias} dia(s)'}; compre ${i.reposicaoSugerida} un.',
+    ];
+    return _local('Lista de compras para ${prev.diasAlvo} dias (pelo ritmo dos últimos ${prev.diasJanela}):\n${linhas.join('\n')}',
+        tipo: dom.TipoResposta.lista, fontes: [for (final i in comprar) i.produtoId]);
+  }
+
+  dom.RespostaConsultor _parados(dom.ResultadoPrevisao prev) {
+    final lista = prev.de(dom.SituacaoPrevisao.parado).toList()..sort((a, b) => (b.estoque ?? 0).compareTo(a.estoque ?? 0));
+    if (lista.isEmpty) return _local('Nenhum produto com saldo ficou sem vender nos últimos ${prev.diasJanela} dias.');
+    final linhas = [for (final i in lista.take(8)) '- ${i.nome}: ${i.estoque} un sem venda.'];
+    return _local('Produtos parados há ${prev.diasJanela} dias (${lista.length}):\n${linhas.join('\n')}\nFaça combo, promoção ou pare de comprar.',
+        tipo: dom.TipoResposta.lista, fontes: [for (final i in lista.take(8)) i.produtoId]);
+  }
+
   /// Resposta calculada (sem IA) ou null se a pergunta é aberta.
   dom.RespostaConsultor? _objetiva(String pergunta) {
     final t = _norm(pergunta);
     final snap = estado.snapshot();
     final resumo = _estoqueSvc.resumir(snap);
 
+    if (_foraDoEscopo(t)) {
+      return _local('Posso ajudar só com o seu negócio: estoque, vendas, custos e preços. Ex.: "o que precisa de atenção agora?"',
+          tipo: dom.TipoResposta.foraDoEscopo);
+    }
+
     if (!estado.estoqueConfiavel) {
       return _local('Não consegui ler o seu estoque agora, então não vou informar números que possam estar errados. Puxe a tela para atualizar e tente de novo.',
           tipo: dom.TipoResposta.indisponivel);
+    }
+
+    if (RegExp(r'atencao|prioridad|priorizar|preocup|urgent|cuidado|risco|problema|o que (eu )?(devo|preciso) (fazer|olhar|resolver|ver)|'
+            r'resumo do dia|como (esta|anda) (a loja|meu estoque|o estoque)')
+        .hasMatch(t)) {
+      return _atencao(_previsao());
+    }
+    if (RegExp(r'quando (acaba|vai acabar|termina)|vai acabar|quantos dias|cobertura|dura (ate|quanto)|quanto (devo |preciso )?(comprar|repor|pedir)|'
+            r'lista de compra|pedido de compra|previs|demanda')
+        .hasMatch(t)) {
+      return _reposicao(_previsao(), _buscarProdutos(t));
+    }
+    if (RegExp(r'parad|encalh|nao vende|nao sai|sem giro|giro baixo|dinheiro parado').hasMatch(t)) {
+      return _parados(_previsao());
     }
 
     if (RegExp(r'vencer|vencimento|validade|vencid').hasMatch(t)) {
@@ -214,11 +329,13 @@ class IaConsultor {
     final per = _periodoDe(_norm(pergunta));
     final abc = estado.curvaAbc(per);
     final resumo = _estoqueSvc.resumir(estado.snapshot());
+    final previsao = _previsao();
     final contexto = dom.ContextoAterramento.de(
       snapshotVersion: abc.snapshotVersion,
       estoque: resumo,
       abc: [abc],
       fuso: estado.fusoLoja,
+      previsao: previsao,
     );
     final consulta = dom.ConsultaIa(
       pergunta: pergunta,
@@ -229,6 +346,7 @@ class IaConsultor {
       demonstracao: false,
       estoque: resumo,
       abc: abc,
+      previsao: previsao,
     );
 
     // No máximo 2 tentativas de 18 s: se o Gemini falhar, a resposta

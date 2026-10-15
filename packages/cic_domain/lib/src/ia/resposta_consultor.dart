@@ -3,7 +3,7 @@ library;
 
 const String versaoContratoIa = 'ia-v1';
 
-enum TipoResposta { objetiva, lista, analise, indisponivel }
+enum TipoResposta { objetiva, lista, analise, indisponivel, foraDoEscopo }
 
 /// De onde veio o texto. Rastreável e visível: fallback nunca se passa por IA.
 enum OrigemResposta { deterministica, ia, fallbackSeguro }
@@ -70,7 +70,7 @@ class RespostaConsultor {
     return RespostaConsultor(
       resposta: resposta,
       tipo: TipoResposta.values.firstWhere(
-        (t) => t.name == tipo,
+        (t) => t.name == tipo || (tipo == 'fora_do_escopo' && t == TipoResposta.foraDoEscopo),
         orElse: () => throw FormatException('Tipo desconhecido: $tipo'),
       ),
       origem: OrigemResposta.ia,
