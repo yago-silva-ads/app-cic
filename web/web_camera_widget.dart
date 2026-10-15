@@ -65,7 +65,7 @@ class _WebCameraWidgetState extends State<WebCameraWidget> {
       _video.play();
       _startScanningLoop();
     } catch (e) {
-      debugPrint('Erro ao iniciar câmera web: $e');
+      debugPrint('Erro ao iniciar câmera web.');
     }
   }
 

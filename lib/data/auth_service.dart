@@ -19,6 +19,15 @@ class AuthService {
   static const _maxFalhas = 5;
   static const _janela = Duration(minutes: 5);
   static const _bloqueio = Duration(minutes: 15);
+  static const _senhaMinima = 12;
+
+  static bool emailValido(String email) =>
+      RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email.trim());
+
+  static bool senhaForte(String senha) => senha.length >= _senhaMinima &&
+      RegExp(r'[a-z]').hasMatch(senha) &&
+      RegExp(r'[A-Z]').hasMatch(senha) &&
+      RegExp(r'\d').hasMatch(senha);
 
   /// Remove caracteres de controle e limita o tamanho. Não filtra aspas nem
   /// palavras: o PostgREST usa parâmetros, e nomes como "D'Ávila" são válidos.
@@ -83,7 +92,9 @@ class AuthService {
 
   Future<void> entrar(String email, String senha) async {
     final e = limpar(email).toLowerCase();
-    if (e.isEmpty || senha.isEmpty) throw ErroCic('Preencha seu e-mail e senha de acesso.');
+    if (!emailValido(e) || senha.isEmpty) {
+      throw ErroCic('Informe um e-mail válido e sua senha de acesso.');
+    }
     final min = await minutosBloqueado(e);
     if (min > 0) {
       throw ErroCic('Muitas tentativas incorretas. Por segurança, aguarde $min minuto(s) antes de tentar novamente.');
@@ -124,22 +135,26 @@ class AuthService {
     final e = limpar(email).toLowerCase();
     final n = limpar(nome, 60);
     final l = limpar(lojaNome, 80);
-    if (e.isEmpty || senha.isEmpty || n.isEmpty || l.isEmpty) {
+    if (!emailValido(e) || n.isEmpty || l.isEmpty) {
       throw ErroCic('Preencha todos os campos obrigatórios.');
     }
-    if (senha.length < 8) throw ErroCic('A senha deve ter no mínimo 8 caracteres.');
+    if (!senhaForte(senha)) {
+      throw ErroCic('Use uma senha com ao menos 12 caracteres, incluindo letras maiúsculas, minúsculas e números.');
+    }
     try {
       final r = await _auth.signUp(
         email: e,
         password: senha,
         data: {'nome': n, 'lojaNome': l, 'documento': limpar(documento, 20)},
+        emailRedirectTo: kIsWeb ? Uri.base.origin : null,
       );
-      if (r.user == null) throw ErroCic('Não foi possível concluir o cadastro.');
-      return r.session != null;
+      // Resultado indistinguível para evitar enumeração de contas pelo cadastro.
+      return r.user != null && r.session != null;
     } on AuthException catch (ex) {
       final m = ex.message.toLowerCase();
-      if (m.contains('already')) throw ErroCic('Este e-mail já está cadastrado. Use "Fazer Login".');
-      if (m.contains('password')) throw ErroCic('Senha fraca. Use ao menos 8 caracteres, com letras e números.');
+      if (m.contains('password')) {
+        throw ErroCic('Use uma senha com ao menos 12 caracteres, incluindo letras maiúsculas, minúsculas e números.');
+      }
       throw ErroCic('Não foi possível criar a conta agora. Tente de novo em instantes.');
     } on ErroCic {
       rethrow;
@@ -161,12 +176,20 @@ class AuthService {
 
   Future<void> sair() async {
     try {
-      final p = await SharedPreferences.getInstance();
-      // Limpa só o que pertence à loja; preserva a preferência de tema.
-      for (final k in p.getKeys().where((k) => k != 'app_cic_tema_v2' && k != _chaveTentativas)) {
-        await p.remove(k);
-      }
-    } catch (_) {}
-    await _auth.signOut();
+      await _auth.signOut();
+    } catch (_) {
+      // Se a revogação remota falhar, ainda encerra a sessão deste dispositivo.
+      try {
+        await _auth.signOut(scope: SignOutScope.local);
+      } catch (_) {}
+    } finally {
+      try {
+        final p = await SharedPreferences.getInstance();
+        // Preserva apenas o tema; sessão, cache da loja e tentativas são limpos.
+        for (final k in p.getKeys().where((k) => k != 'app_cic_tema_v2')) {
+          await p.remove(k);
+        }
+      } catch (_) {}
+    }
   }
 }

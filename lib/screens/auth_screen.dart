@@ -65,7 +65,7 @@ class _AuthScreenState extends State<AuthScreen> {
         if (!logado && mounted) {
           setState(() {
             _cadastro = false;
-            _ok = 'Cadastro realizado! Enviamos um link de confirmação para o seu e-mail. Confirme e depois entre.';
+            _ok = 'Se for possível concluir o cadastro, enviaremos instruções para o e-mail informado. Verifique sua caixa de entrada.';
           });
         }
       }
