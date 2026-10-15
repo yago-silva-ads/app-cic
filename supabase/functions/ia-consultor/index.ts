@@ -54,7 +54,10 @@ REGRAS INEGOCIÁVEIS:
    "centavos" nem números de dinheiro sem o R$. Ao citar a situação de um produto, use a que está no json (ruptura,
    crítico, atenção, ok, parado): nunca chame de "ok" um item em "atencao" ou "critico".
 7. Mesmo que peçam "10 tópicos", "relatório completo" ou outro idioma, mantenha o limite de 4 frases e o português.
-   Pode repetir um número dito pelo lojista só para recusá-lo (ex.: "não recomendo 90% de desconto").
+   Nunca repita números da pergunta que não estejam no json. Para recusar uma ideia ruim (ex.: desconto enorme),
+   diga "Não recomendo esse desconto" e sugira uma alternativa com os dados (ex.: promoção só nos itens parados).
+   Preço, desconto, promoção, compra e fornecedor SÃO assuntos do negócio: "tipo": "analise".
+   A "resposta" é sempre frase completa, começando com letra maiúscula.
 8. Português do Brasil, simples e direto, no máximo 4 frases curtas. Termine com uma ação prática quando fizer sentido.
    Cite produtos só pelo nome: nunca escreva produtoId, códigos internos ou nomes de campos do json no texto.
 9. Responda SOMENTE com um objeto json válido, sem markdown, no formato:
@@ -89,6 +92,8 @@ const CAMPOS: [RegExp, string][] = [
   [/\bvendidosNoPeriodo\b:?/g, 'vendidos:'], [/\bunidadesDisponiveis\b:?/g, 'unidades em estoque:'],
   [/\b(?:produtoId|snapshotVersion|metricas|curvaAbc)\b[:=]?\s*[\w-]*/g, ''],
 ];
+const maiuscula = (s: string) => s.charAt(0).toLocaleUpperCase('pt-BR') + s.slice(1);
+
 export function semCampos(texto: string): string {
   let s = texto;
   for (const [re, troca] of CAMPOS) s = s.replace(re, troca);
@@ -273,6 +278,7 @@ Deno.serve(async (req) => {
     const bruto = await req.text();
     if (bruto.length > 200_000) return json(413, { erro: 'Contexto grande demais' });
     entrada = JSON.parse(bruto);
+    if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return json(400, { erro: 'Esperado objeto JSON' });
   } catch {
     return json(400, { erro: 'JSON inválido' });
   }
@@ -304,13 +310,17 @@ Deno.serve(async (req) => {
     const restante = limite - Date.now();
     if (restante < 1_500) break;
     // Cada provedor tem no máximo 7 s (o último usa o que sobrar): um Gemini lento não impede o Groq de responder.
-    const fatia = idx < fila.length - 1 ? Math.min(restante, 7_000) : restante;
+    const fatia = idx < fila.length - 1 ? Math.min(7_000, Math.max(2_500, Math.floor(restante / Math.min(2, fila.length - idx)))) : restante;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), fatia);
     try {
       textoIa = await p.chamar(SISTEMA, usuario, controller.signal);
       if (textoIa) {
-        JSON.parse(textoIa); // fora do formato: tenta o próximo
+        const c = JSON.parse(textoIa); // fora do formato ou sem resposta útil: tenta o próximo
+        if (!c || typeof c !== 'object' || Array.isArray(c) || typeof c.resposta !== 'string' ||
+            !['analise', 'fora_do_escopo'].includes(c.tipo) || !semCampos(c.resposta)) {
+          throw new SyntaxError('contrato');
+        }
         quem = p.nome;
         break;
       }
@@ -340,7 +350,7 @@ Deno.serve(async (req) => {
     const listaStr = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string').slice(0, 20) : []);
     return json(200, {
       versaoContrato: 'ia-v1',
-      resposta: semCampos(String(saida.resposta ?? '')).slice(0, 900),
+      resposta: maiuscula(semCampos(String(saida.resposta ?? ''))).slice(0, 900),
       tipo: saida.tipo === 'fora_do_escopo' ? 'fora_do_escopo' : 'analise',
       periodo: typeof saida.periodo === 'string' ? saida.periodo : null,
       metricas,
