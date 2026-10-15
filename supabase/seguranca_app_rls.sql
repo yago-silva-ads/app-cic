@@ -12,7 +12,11 @@
 DO $$
 DECLARE
   tabela RECORD;
+<<<<<<< HEAD
   sem_dono TEXT;
+=======
+  coluna_dono TEXT;
+>>>>>>> seguranca-codex2
 BEGIN
   SELECT string_agg(c.relname, ', ') INTO sem_dono
   FROM pg_class c
@@ -50,6 +54,7 @@ BEGIN
     GROUP BY c.oid, c.relname
   LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', tabela.relname);
+<<<<<<< HEAD
     IF NOT tabela.tem_policy THEN
       EXECUTE format(
         'CREATE POLICY seguranca_app_tenant ON public.%I FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
@@ -57,6 +62,16 @@ BEGIN
       );
       RAISE NOTICE 'Policy de dono criada em %', tabela.relname;
     END IF;
+=======
+
+    -- Uma policy RESTRICTIVE combina por AND com as permissivas existentes.
+    -- Assim, restringe o tenant sem ampliar operações (p.ex. DELETE de vendas).
+    EXECUTE format('DROP POLICY IF EXISTS seguranca_app_tenant ON public.%I', tabela.relname);
+    EXECUTE format(
+      'CREATE POLICY seguranca_app_tenant ON public.%I AS RESTRICTIVE FOR ALL TO authenticated USING (%I = auth.uid()) WITH CHECK (%I = auth.uid())',
+      tabela.relname, coluna_dono, coluna_dono
+    );
+>>>>>>> seguranca-codex2
   END LOOP;
 END;
 $$;
