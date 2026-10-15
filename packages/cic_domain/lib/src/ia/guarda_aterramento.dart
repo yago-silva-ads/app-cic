@@ -1,5 +1,6 @@
 import '../abc/curva_abc.dart';
 import '../estoque/estoque.dart';
+import '../estoque/previsao.dart';
 import '../tempo/fuso_loja.dart';
 import '../tempo/periodo.dart';
 import 'resposta_consultor.dart';
@@ -27,6 +28,7 @@ class ContextoAterramento {
     ResumoEstoque? estoque,
     List<ResultadoCurvaAbc> abc = const [],
     FusoLoja? fuso,
+    ResultadoPrevisao? previsao,
   }) {
     final c = ContextoAterramento._(snapshotVersion);
     for (final n in const [1, 7, 30, limiteRupturaUnidades]) {
@@ -88,6 +90,20 @@ class ContextoAterramento {
       }
       for (final a in r.alertas) {
         c._ids.add(a.id);
+      }
+    }
+    if (previsao != null) {
+      for (final n in [previsao.diasJanela, previsao.diasAlvo]) {
+        c._addNumero(n);
+      }
+      for (final i in previsao.itens) {
+        c._nomes.putIfAbsent(i.produtoId, () => i.nome);
+        c._ids.add(i.produtoId);
+        c._addNumero(i.estoque);
+        c._addNumero(i.vendidosNoPeriodo);
+        c._addNumero(i.coberturaDias);
+        c._addNumero(i.reposicaoSugerida);
+        c._numeros.add(i.mediaDiariaCentesimos); // ex.: 1,25 un/dia
       }
     }
     return c;
@@ -217,6 +233,7 @@ class ConsultaIa {
     required this.demonstracao,
     this.estoque,
     this.abc,
+    this.previsao,
   });
 
   final String pergunta;
@@ -227,6 +244,7 @@ class ConsultaIa {
   final bool demonstracao;
   final ResumoEstoque? estoque;
   final ResultadoCurvaAbc? abc;
+  final ResultadoPrevisao? previsao;
 
   Map<String, Object?> toJson() => {
     'versaoContrato': versaoContratoIa,
@@ -240,6 +258,7 @@ class ConsultaIa {
       if (estoque != null) 'estoque': estoque!.toJson(),
       if (abc != null) 'curvaAbc': abc!.toJson(),
     },
+    if (previsao != null) 'previsao': previsao!.toJson(),
     'qualidade': {
       'estoqueCompleto': estoque?.completo,
       'problemas': [

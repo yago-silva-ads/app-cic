@@ -5,6 +5,7 @@ library;
 export 'src/abc/curva_abc.dart';
 export 'src/dinheiro.dart';
 export 'src/estoque/estoque.dart';
+export 'src/estoque/previsao.dart';
 export 'src/ia/consultor_seguro.dart';
 export 'src/ia/erros_ia.dart';
 export 'src/ia/guarda_aterramento.dart';
