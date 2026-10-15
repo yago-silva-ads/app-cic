@@ -59,8 +59,13 @@ class RespostaConsultor {
     }
 
     final metricas = json['metricas'] ?? const {};
-    if (metricas is! Map || metricas.values.any((v) => v is! num)) {
+    if (metricas is! Map ||
+        metricas.keys.any((k) => k is! String) ||
+        metricas.values.any((v) => v is! num || !v.isFinite)) {
       throw const FormatException('Campo "metricas" deve mapear nome → número');
+    }
+    if (json['periodo'] != null && json['periodo'] is! String) {
+      throw const FormatException('Campo "periodo" deve ser string ou null');
     }
     final tipo = campo<String>('tipo');
     final atualizadoEm = DateTime.tryParse(campo<String>('atualizadoEm'));
