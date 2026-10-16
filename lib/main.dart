@@ -1,84 +1,104 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Import do Firebase gerado pelo CLI
-import 'screens/tela_login.dart';
-import 'screens/tela_dashboard.dart';
-import 'web/tela_dashboard_web.dart';
+
+import 'app/shell.dart';
+import 'core/config.dart';
+import 'core/theme.dart';
+import 'data/auth_service.dart';
+import 'data/repository_demo.dart';
+import 'screens/auth_screen.dart';
+import 'state/app_state.dart';
 
 Future<void> main() async {
-  // Garante que os widgets do Flutter estejam prontos
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializa o Firebase (Analytics, etc) com as opções corretas
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
-  // Inicializa o Supabase com a URL corrigida
-  await Supabase.initialize(
-    url: 'https://drszfkijbemrzzgxvboy.supabase.co', // <-- CORRIGIDO AQUI!
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyc3pma2lqYmVtcnp6Z3h2Ym95Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5ODU3NzIsImV4cCI6MjA5NTU2MTc3Mn0.TYgZDdviLlJoPR5ZFlLqHt9ltzeIwv2IWLMGFlqmA3Y',
-  );
-
-  runApp(const MyApp());
+  await initializeDateFormatting('pt_BR');
+  await Supabase.initialize(url: Config.supabaseUrl, anonKey: Config.supabaseAnonKey);
+  final tema = TemaController();
+  await tema.carregar();
+  runApp(CicApp(tema: tema));
 }
 
-class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+class CicApp extends StatelessWidget {
+  const CicApp({super.key, required this.tema});
+  final TemaController tema;
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: tema,
+      builder: (context, _) => MaterialApp(
+        title: 'APP-CIC',
+        debugShowCheckedModeBanner: false,
+        theme: construirTema(tema.paleta),
+        locale: const Locale('pt', 'BR'),
+        supportedLocales: const [Locale('pt', 'BR')],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        // Letra maior escolhida pelo usuário (soma-se à do próprio celular).
+        builder: (context, child) {
+          final mq = MediaQuery.of(context);
+          final sistema = mq.textScaler.scale(1);
+          return MediaQuery(
+            data: mq.copyWith(textScaler: TextScaler.linear((sistema * tema.escala).clamp(1.0, 2.0))),
+            child: child!,
+          );
+        },
+        home: _Porteiro(tema: tema),
+      ),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
-  /// 🔒 Chave global do Navigator para poder navegar de qualquer lugar
-  final _navigatorKey = GlobalKey<NavigatorState>();
+/// Decide entre login e app conforme a sessão do Supabase. O estado da loja é
+/// recriado a cada usuário, então nada de uma conta vaza para a outra.
+class _Porteiro extends StatefulWidget {
+  const _Porteiro({required this.tema});
+  final TemaController tema;
 
   @override
-  void initState() {
-    super.initState();
+  State<_Porteiro> createState() => _PorteiroState();
+}
 
-    // 🔒 Auth Gateway: escuta mudanças de estado da autenticação em tempo real.
-    // Cobre: login, logout, expiração de token, revogação remota.
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
+class _PorteiroState extends State<_Porteiro> {
+  final _auth = AuthService();
+  AppState? _estado;
+  String? _uid;
 
-      if (event == AuthChangeEvent.signedIn) {
-        _navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(
-            builder: (_) => kIsWeb ? const TelaDashboardWeb() : const TelaDashboard(),
-          ),
-          (_) => false,
-        );
-      } else if (event == AuthChangeEvent.signedOut) {
-        // Sessão encerrada ou token expirou → volta para Login
-        _navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const TelaLogin()),
-          (_) => false,
-        );
-      }
-    });
+  @override
+  void dispose() {
+    _estado?.dispose();
+    super.dispose();
+  }
+
+  AppState _estadoPara(String uid) {
+    if (_uid != uid) {
+      _estado?.dispose();
+      _estado = AppState(tema: widget.tema, repo: Config.demo ? DemoRepository() : null);
+      _uid = uid;
+    }
+    return _estado!;
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🔒 Verifica se já existe sessão ativa na abertura do app
-    final session = Supabase.instance.client.auth.currentSession;
-
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      title: 'Leitor GS1 - CIC',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      // Se logado → Dashboard (Web ou Mobile), senão → Login
-      home: session != null
-          ? (kIsWeb ? const TelaDashboardWeb() : const TelaDashboard())
-          : const TelaLogin(),
+    if (Config.demo) return AppShell(estado: _estadoPara('demo'), auth: _auth);
+    return StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, _) {
+        final sessao = Supabase.instance.client.auth.currentSession;
+        if (sessao == null) {
+          _estado?.dispose();
+          _estado = null;
+          _uid = null;
+          return AuthScreen(auth: _auth, tema: widget.tema);
+        }
+        return AppShell(estado: _estadoPara(sessao.user.id), auth: _auth);
+      },
     );
   }
 }

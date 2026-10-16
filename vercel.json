@@ -1,10 +1,18 @@
 {
-  "buildCommand": "if [ ! -d flutter ]; then git clone https://github.com/flutter/flutter.git -b stable --depth 1; fi && if [ ! -f lib/secrets.dart ]; then echo \"class Secrets { static const String geminiApiKey = '${GEMINI_API_KEY}'; }\" > lib/secrets.dart; fi && if [ ! -f .env ]; then echo \"API_KEY=${GEMINI_API_KEY}\" > .env; fi && ./flutter/bin/flutter build web --release",
+  "buildCommand": "if [ ! -d flutter ]; then git clone https://github.com/flutter/flutter.git -b stable --depth 1; fi && ./flutter/bin/flutter build web --release --no-wasm-dry-run --dart-define=DEMO=false && find build/web -type f -name '*.map' -delete",
   "outputDirectory": "build/web",
-  "rewrites": [
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "headers": [
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://drszfkijbemrzzgxvboy.supabase.co wss://drszfkijbemrzzgxvboy.supabase.co https://*.openfoodfacts.org https://*.openbeautyfacts.org https://*.openproductsfacts.org https://www.gstatic.com https://fonts.googleapis.com https://fonts.gstatic.com; worker-src 'self' blob:; media-src 'self' blob:; upgrade-insecure-requests" }
+      ]
     }
   ]
 }

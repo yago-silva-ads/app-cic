@@ -1,775 +1,513 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
-import '../models/produto.dart';
-import '../utils/moeda_formatter.dart';
-import '../services/supabase_helper.dart';
-import '../services/api_service.dart';
-import 'tela_estoque.dart';
-import 'tela_dashboard.dart';
-import 'tela_vendedor.dart';
-<<<<<<< HEAD
-=======
-import 'tela_login.dart';
-import '../widgets/app_drawer.dart';
->>>>>>> fix/ui-overflow-and-ia-bearer
+import '../core/format.dart';
+import '../core/gs1.dart';
+import '../core/theme.dart';
+import '../data/models.dart';
+import '../data/repository.dart';
+import '../state/app_state.dart';
+import '../ui/widgets.dart';
 
+/// Leitor GS1 & cadastro (porte de `LeitorScreen.tsx`).
+///
+/// Diferenças deliberadas em relação ao protótipo:
+///  * Não inventa custo, lote nem validade: só preenche o que a base de
+///    produtos devolve (nome/categoria).
+///  * Produto já cadastrado: a quantidade digitada é SOMADA ao saldo (entrada
+///    de mercadoria), a menos que se marque "substituir saldo".
 class LeitorScreen extends StatefulWidget {
-  const LeitorScreen({super.key});
+  const LeitorScreen({
+    super.key,
+    required this.estado,
+    this.codigoInicial,
+    required this.onAbrirScanner,
+    required this.onSalvo,
+  });
+
+  final AppState estado;
+  final String? codigoInicial;
+  final Future<void> Function([ValueChanged<String>? aoLer]) onAbrirScanner;
+  final VoidCallback onSalvo;
+
   @override
   State<LeitorScreen> createState() => _LeitorScreenState();
 }
 
 class _LeitorScreenState extends State<LeitorScreen> {
-  String codigoLido = 'A aguardar leitura...';
-  bool buscando = false;
-  bool _alertaMargem = false; // Controle do Limitador Anti-Falência
+  final _codigo = TextEditingController();
+  final _nome = TextEditingController();
+  final _categoria = TextEditingController(text: 'Geral');
+  final _lote = TextEditingController();
+  final _qtd = TextEditingController();
+  final _custo = TextEditingController();
+  final _markup = TextEditingController(text: '2,00');
+  final _venda = TextEditingController();
 
-  final MobileScannerController scannerController = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
-    formats: const [BarcodeFormat.qrCode, BarcodeFormat.code128, BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.upcA, BarcodeFormat.upcE, BarcodeFormat.code39, BarcodeFormat.code93, BarcodeFormat.codabar, BarcodeFormat.itf, BarcodeFormat.dataMatrix],
-  );
+  DateTime? _validade;
+  String _origem = 'Revendido';
+  bool _buscando = false;
+  bool _salvando = false;
+  bool _substituir = false;
+  Produto? _existente;
+  ({String tipo, String texto})? _msg;
+  final List<({String codigo, int qtd})> _insumos = [];
 
-  final TextEditingController codigoManualController = TextEditingController();
-  final TextEditingController nomeController = TextEditingController();
-  final TextEditingController loteController = TextEditingController();
-  final TextEditingController quantidadeController = TextEditingController();
-  final TextEditingController valorCompraController = TextEditingController();
-
-  final TextEditingController markupController = TextEditingController(
-    text: '2.0',
-  ); // Lucro de 100% por padrão
-  final TextEditingController valorVendaController = TextEditingController();
-
-<<<<<<< HEAD
-  String tipoProdutoSelecionado = 'revendido'; // Novo campo
-=======
-  String tipoProdutoSelecionado = 'Revendido';
->>>>>>> fix/ui-overflow-and-ia-bearer
-
-  List<Produto> bancoDeEstoque = [];
-
-  DateTime? _dataValidadeSelecionada;
+  AppState get e => widget.estado;
 
   @override
   void initState() {
     super.initState();
-    _carregarDados();
-
-    valorCompraController.addListener(_calcularVendaEmTempoReal);
-    markupController.addListener(_calcularVendaEmTempoReal);
+    final c = widget.codigoInicial;
+    if (c != null && c.isNotEmpty) {
+      _codigo.text = c;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _consultar(c));
+    }
   }
 
   @override
   void dispose() {
-    scannerController.dispose();
+    for (final c in [_codigo, _nome, _categoria, _lote, _qtd, _custo, _markup, _venda]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _calcularVendaEmTempoReal() {
-    if (valorCompraController.text.isEmpty || markupController.text.isEmpty) {
-      valorVendaController.clear();
+  String _fmt(double v) => v.toStringAsFixed(2).replaceAll('.', ',');
+
+  double get _markupNum => lerDecimal(_markup.text) ?? 0;
+  bool get _margemBaixa => _markupNum > 0 && _markupNum < 1.3;
+
+  void _recalcularVenda() {
+    final cu = lerDecimal(_custo.text) ?? 0;
+    final mk = lerDecimal(_markup.text) ?? 0;
+    if (cu > 0 && mk > 0) _venda.text = _fmt((cu * mk * 100).round() / 100);
+    setState(() {});
+  }
+
+  void _vendaMudou() {
+    final cu = lerDecimal(_custo.text) ?? 0;
+    final v = lerDecimal(_venda.text) ?? 0;
+    if (cu > 0 && v > 0) _markup.text = _fmt(v / cu);
+    setState(() {});
+  }
+
+  void _recalcularCustoInsumos() {
+    var total = 0.0;
+    for (final i in _insumos) {
+      final p = e.estoque.where((x) => x.codigo == i.codigo).firstOrNull;
+      if (p != null) total += p.valorCompra * i.qtd;
+    }
+    if (total > 0) {
+      _custo.text = _fmt(total);
+      _recalcularVenda();
+    }
+  }
+
+  Future<void> _consultar(String bruto) async {
+    final cod = bruto.trim();
+    if (cod.isEmpty) return;
+
+    final existente = e.estoque.where((p) => p.codigo == cod).firstOrNull;
+    if (existente != null) {
       setState(() {
-        _alertaMargem = false;
+        _existente = existente;
+        _nome.text = existente.nome;
+        _categoria.text = existente.categoria;
+        _lote.text = existente.lote;
+        _qtd.text = '';
+        _custo.text = _fmt(existente.valorCompra);
+        _markup.text = _fmt(existente.markup);
+        _venda.text = _fmt(existente.valorVenda);
+        _origem = existente.origem == 'Fabricado' ? 'Fabricado' : 'Revendido';
+        _validade = existente.dataValidade;
+        _substituir = false;
+        _msg = (tipo: 'info', texto: 'Produto já cadastrado: saldo atual de ${existente.quantidade} un. Informe a quantidade que está ENTRANDO para somar ao saldo.');
       });
       return;
     }
 
-    String valorTexto = valorCompraController.text
-        .replaceAll('.', '')
-        .replaceAll(',', '.');
-    double? custo = double.tryParse(valorTexto);
-    double? markup = double.tryParse(
-      markupController.text.replaceAll(',', '.'),
-    );
-
-    if (custo != null && markup != null) {
-      double venda = custo * markup;
-      valorVendaController.text = venda.toStringAsFixed(2).replaceAll('.', ',');
-
-      // Ativa o alerta se a margem for menor que 1.3
-      setState(() {
-        _alertaMargem = markup < 1.3;
-      });
-    }
-  }
-
-  Future<void> _carregarDados() async {
-    final produtos = await SupabaseHelper.getEstoque();
     setState(() {
-      bancoDeEstoque = produtos;
+      _existente = null;
+      _buscando = true;
+      _msg = null;
     });
-  }
-
-  Future<void> validarGS1(String code) async {
-    if (code == "7891721201806") {
-      setState(() {
-        nomeController.text = "GLIFAGE XR 500MG TAB RM (30)";
-      });
-    } else {
-      await _consultarService(code);
-    }
-  }
-
-  Future<void> _consultarService(String codigo) async {
+    final r = await consultarGs1(cod);
+    if (!mounted) return;
     setState(() {
-      buscando = true;
-      nomeController.text = "Consultando nuvem...";
-    });
-
-    String? nomeEncontrado = await ApiService.buscarProdutoExterno(codigo);
-
-    setState(() {
-      buscando = false;
-      if (nomeEncontrado != null) {
-        nomeController.text = nomeEncontrado;
+      _buscando = false;
+      if (r.encontrado) {
+        _nome.text = r.nome ?? '';
+        if ((r.categoria ?? '').isNotEmpty) _categoria.text = r.categoria!;
+        _msg = (tipo: 'sucesso', texto: 'Produto identificado via ${r.origem}: "${r.nome}". Confira o nome e informe custo, quantidade e validade.');
       } else {
-        nomeController.text = "";
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Produto não encontrado. Digite o nome."),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
+        _msg = (tipo: 'info', texto: r.mensagem ?? 'Código lido. Preencha o nome do produto.');
+      }
+      if (!gtinValido(cod) && RegExp(r'^\d+$').hasMatch(cod)) {
+        _msg = (tipo: 'info', texto: 'Atenção: o dígito verificador do código $cod não confere com o padrão GS1. Confira se digitou certo.');
       }
     });
   }
 
-  Future<void> _selecionarDataValidade(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _dataValidadeSelecionada ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null && picked != _dataValidadeSelecionada) {
-      setState(() {
-        _dataValidadeSelecionada = picked;
-      });
-    }
-  }
-
-  void salvar() async {
-    if (nomeController.text.isEmpty || codigoLido == 'A aguardar leitura...') {
-      return;
-    }
-
-    int? qtd = int.tryParse(quantidadeController.text);
-    String valorTexto = valorCompraController.text
-        .replaceAll('.', '')
-        .replaceAll(',', '.');
-    double? valor = double.tryParse(valorTexto);
-
-    double? markup = double.tryParse(
-      markupController.text.replaceAll(',', '.'),
-    );
-
-    double? valorVenda = double.tryParse(
-      valorVendaController.text.replaceAll('.', '').replaceAll(',', '.'),
-    );
-
-    if (qtd == null || valor == null || valorVenda == null || markup == null ||
-        qtd <= 0 || valor <= 0 || markup <= 0 || valorVenda <= 0) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Erro: Valores numéricos não podem estar vazios ou zerados!"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    // Confirmação Dupla Anti-Falência
-    if (_alertaMargem) {
-      bool confirmar =
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text(
-                    "Preço Insuficiente!",
-                    style: TextStyle(color: Colors.red),
-                  ),
-                ],
-              ),
-              content: const Text(
-                "A margem de lucro definida pode não ser suficiente para cobrir seus custos fixos. Deseja salvar este produto mesmo assim?",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text("Cancelar"),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: const Text(
-                    "Salvar mesmo assim",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-
-      if (!confirmar) return; // Cancela o salvamento se o usuário não confirmar
-    }
-
-    Produto novoProduto = Produto(
-      codigo: codigoLido,
-      nome: nomeController.text,
-      lote: loteController.text,
-      quantidade: qtd,
-      valorCompra: valor,
-      markup: markup,
-      valorVenda: valorVenda,
-<<<<<<< HEAD
-      tipoProduto: tipoProdutoSelecionado,
-=======
-      origem:
-          tipoProdutoSelecionado, // <-- Alterado de 'tipoProduto' para 'origem'
-      dataValidade: _dataValidadeSelecionada,
-      dataEntrada: DateTime.now(), // <-- Registro automático do momento da entrada
->>>>>>> fix/ui-overflow-and-ia-bearer
-    );
-
-    await SupabaseHelper.insertProduto(novoProduto);
-
-    _carregarDados();
-    _limpar();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Produto salvo com sucesso!"),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  }
+  Future<void> _abrirCamera() => widget.onAbrirScanner((c) {
+    setState(() => _codigo.text = c);
+    _consultar(c);
+  });
 
   void _limpar() {
     setState(() {
-      codigoLido = 'A aguardar leitura...';
-      codigoManualController.clear();
-      nomeController.clear();
-      loteController.clear();
-      quantidadeController.clear();
-      valorCompraController.clear();
-      markupController.text = '2.0';
-      valorVendaController.clear();
-<<<<<<< HEAD
-      tipoProdutoSelecionado = 'revendido';
-=======
-      tipoProdutoSelecionado = 'Revendido';
-      _alertaMargem = false;
-      _dataValidadeSelecionada = null;
->>>>>>> fix/ui-overflow-and-ia-bearer
+      for (final c in [_codigo, _nome, _lote, _qtd, _custo, _venda]) {
+        c.clear();
+      }
+      _categoria.text = 'Geral';
+      _markup.text = '2,00';
+      _validade = null;
+      _origem = 'Revendido';
+      _existente = null;
+      _substituir = false;
+      _insumos.clear();
+      _msg = null;
     });
+  }
 
-    scannerController.start();
+  Future<void> _salvar() async {
+    final cod = _codigo.text.trim();
+    if (cod.isEmpty) return setState(() => _msg = (tipo: 'erro', texto: 'Informe ou bipe o código de barras do produto.'));
+    if (_nome.text.trim().isEmpty) return setState(() => _msg = (tipo: 'erro', texto: 'Informe o nome/descrição do produto.'));
+    final qtd = lerInteiro(_qtd.text);
+    if (qtd == null || qtd < 0) return setState(() => _msg = (tipo: 'erro', texto: 'Informe a quantidade (número inteiro, 0 ou mais).'));
+    final custo = lerDecimal(_custo.text);
+    if (custo == null || custo < 0) return setState(() => _msg = (tipo: 'erro', texto: 'Informe o custo unitário.'));
+    final mk = lerDecimal(_markup.text) ?? 1.3;
+    final venda = lerDecimal(_venda.text) ?? custo * mk;
+    if (venda < 0) return setState(() => _msg = (tipo: 'erro', texto: 'Preço de venda inválido.'));
+
+    final p = Produto(
+      codigo: cod,
+      nome: _nome.text.trim(),
+      lote: _lote.text.trim(),
+      quantidade: qtd,
+      valorCompra: custo,
+      markup: mk,
+      valorVenda: venda,
+      origem: _origem,
+      categoria: _categoria.text.trim().isEmpty ? 'Geral' : _categoria.text.trim(),
+      dataEntrada: DateTime.now(),
+      dataValidade: _validade,
+      estoqueMinimo: _existente?.estoqueMinimo ?? 5,
+    );
+
+    setState(() {
+      _salvando = true;
+      _msg = null;
+    });
+    try {
+      final saldo = await e.salvarProduto(p, somar: _existente != null ? !_substituir : true);
+      if (!mounted) return;
+      aviso(context, 'Produto "${p.nome}" salvo. Saldo atual: $saldo un.');
+      widget.onSalvo();
+    } on ErroCic catch (er) {
+      if (mounted) {
+        setState(() {
+          _salvando = false;
+          _msg = (tipo: 'erro', texto: er.mensagem);
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-<<<<<<< HEAD
-      appBar: AppBar(
-        title: const Text('Leitor CIC 2026'),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            SizedBox(
-              height: MediaQuery.sizeOf(context).height * 0.1,
-              child: DrawerHeader(
-                margin: EdgeInsets.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1565C0),
-                ),
-                child: const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Menu',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Página Inicial'),
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.pie_chart),
-              title: const Text('Dashboard Inteligente'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaDashboard()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.list),
-              title: const Text('Estoque Atual'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TelaEstoque(
-                      estoque: bancoDeEstoque,
-                      onUpdate: _atualizarTela,
-                    ),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.attach_money),
-              title: const Text('Custos Operacionais'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const TelaVendedor()),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-=======
-      appBar: AppBar(title: const Text('Leitor CIC 2026')),
-      drawer: const AppDrawer(),
->>>>>>> fix/ui-overflow-and-ia-bearer
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Card de Entrada Direta / Leitor USB / Digitação Rápida (Essencial no Web & Mobile)
-            Container(
-              margin: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade300, width: 1.5),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.qr_code_scanner, color: Color(0xFF0D47A1)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: codigoManualController,
-                      decoration: const InputDecoration(
-                        hintText: 'Digite ou Bipe (Leitor USB) o EAN/GS1...',
-                        border: InputBorder.none,
-                        isDense: true,
-                        hintStyle: TextStyle(fontSize: 13),
-                      ),
-                      keyboardType: TextInputType.text,
-                      onSubmitted: (val) {
-                        final code = val.trim();
-                        if (code.isNotEmpty) {
-                          setState(() => codigoLido = code);
-                          scannerController.stop();
-                          validarGS1(code);
-                        }
-                      },
-                    ),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      final code = codigoManualController.text.trim();
-                      if (code.isNotEmpty) {
-                        setState(() => codigoLido = code);
-                        scannerController.stop();
-                        validarGS1(code);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0D47A1),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: const Text('Consultar', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
-            ),
-
-            // Aviso explicativo de câmera para Versão Web / PC
-            if (kIsWeb)
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 18, color: Colors.black87),
-                    SizedBox(width: 8),
+    final c = context.c;
+    final revendidos = e.estoque.where((p) => p.origem != 'Fabricado').toList();
+    return CicPagina(children: [
+      Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: CicCard(
+            padding: const EdgeInsets.all(22),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Wrap(spacing: 12, runSpacing: 12, alignment: WrapAlignment.spaceBetween, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  CicIconeCaixa(LucideIcons.camera, tom: BadgeTom.ouro, tamanho: 42),
+                  const SizedBox(width: 12),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('Captura de Código de Barras GS1', style: TextStyle(color: c.text, fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text('Aponte a câmera para o GTIN/EAN ou digite o código', style: TextStyle(color: c.textMuted, fontSize: 11.5)),
+                  ]),
+                ]),
+                Row(mainAxisSize: MainAxisSize.min, children: [
+                  CicBotao('Abrir câmera / bipador', icone: LucideIcons.camera, compacto: true, onPressed: _abrirCamera),
+                  const SizedBox(width: 8),
+                  CicBotao('Limpar', secundario: true, compacto: true, onPressed: _limpar),
+                ]),
+              ]),
+              const SizedBox(height: 14),
+              Divider(color: c.cardBorder),
+              if (_msg != null) ...[const SizedBox(height: 12), _banner(c, _msg!)],
+              const SizedBox(height: 16),
+              _linha([
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
                     Expanded(
-                      child: Text(
-                        "Dica Web/PC: Use o campo acima com Leitor USB ou digite o código se a câmera do navegador estiver bloqueada.",
-                        style: TextStyle(fontSize: 11, color: Colors.black87, fontWeight: FontWeight.w500),
+                      child: CicCampo(
+                        rotulo: 'Código de barras (GTIN-13 / EAN-13) *',
+                        controller: _codigo,
+                        dica: 'Ex: 7891721201806',
+                        teclado: TextInputType.number,
+                        onSubmitted: _consultar,
                       ),
                     ),
-                  ],
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 22),
+                      child: CicBotao(_buscando ? '...' : 'Consultar', icone: LucideIcons.search, secundario: true, onPressed: _buscando ? null : () => _consultar(_codigo.text)),
+                    ),
+                  ]),
+                ]),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('TIPO DO PRODUTO', style: TextStyle(color: c.textMuted, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Expanded(child: _tipoBtn(c, 'Revendido')),
+                    const SizedBox(width: 8),
+                    Expanded(child: _tipoBtn(c, 'Fabricado')),
+                  ]),
+                ]),
+              ], pesos: const [2, 1]),
+              _linha([
+                CicCampo(rotulo: 'Nome / descrição do produto *', controller: _nome, dica: 'Ex: GLIFAGE XR 500MG TAB RM (30)'),
+                CicCampo(rotulo: 'Categoria', controller: _categoria, dica: 'Ex: Medicamentos, Bebidas'),
+              ], pesos: const [2, 1]),
+              _linha([
+                CicCampo(rotulo: 'Número do lote', controller: _lote, dica: 'Ex: L-2026A'),
+                CicCampo(
+                  rotulo: _existente == null ? 'Quantidade em estoque *' : 'Quantidade que está entrando *',
+                  controller: _qtd,
+                  teclado: TextInputType.number,
+                  dica: '0',
+                  onChanged: (_) => setState(() {}),
                 ),
-              ),
-
-            SizedBox(
-              height: 200,
-              child: MobileScanner(
-                controller: scannerController,
-                onDetect: (cap) {
-                  if (cap.barcodes.isEmpty) return;
-                  final barcode = cap.barcodes.first;
-                  final code = barcode.rawValue ?? "";
-
-                  if (codigoLido == 'A aguardar leitura...') {
-                    setState(() => codigoLido = code);
-                    scannerController.stop();
-                    
-                    if (barcode.format == BarcodeFormat.qrCode) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Formato QR Code reconhecido com sucesso"),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                    
-                    validarGS1(code);
-                  }
-                },
-              ),
-            ),
-            Wrap(
-              alignment: WrapAlignment.center,
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                if (kIsWeb)
-                  TextButton.icon(
-                    onPressed: () {
-                      scannerController.start();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Solicitando acesso à câmera ao navegador..."),
-                          backgroundColor: Colors.blue,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.videocam, size: 16, color: Colors.blue),
-                    label: const Text("Câmera Web", style: TextStyle(color: Colors.blue)),
-                  )
-                else
-                  IconButton(
-                    onPressed: () => scannerController.toggleTorch(),
-                    icon: const Icon(Icons.flashlight_on, color: Colors.amber),
-                    tooltip: 'Ligar/Desligar Flash',
-                  ),
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() => codigoLido = "7891721201806");
-                    scannerController.stop();
-                    validarGS1("7891721201806");
-                  },
-                  icon: const Icon(Icons.bolt, size: 16),
-                  label: const Text("Simular"),
-                ),
-                TextButton.icon(
-                  onPressed: _limpar,
-                  icon: const Icon(Icons.refresh, size: 16, color: Colors.red),
-                  label: const Text(
-                    "Limpar",
-                    style: TextStyle(color: Colors.red),
-                  ),
+                _campoValidade(c),
+              ]),
+              if (_existente != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: c.sub, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.subBorder)),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      value: _substituir,
+                      activeThumbColor: c.gold,
+                      onChanged: (v) => setState(() => _substituir = v),
+                      title: Text('Substituir o saldo (contagem de inventário)', style: TextStyle(color: c.text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Text(
+                      () {
+                        final q = lerInteiro(_qtd.text);
+                        final atual = _existente!.quantidade;
+                        if (q == null) return 'Saldo atual: $atual un.';
+                        return _substituir ? 'Saldo ficará em $q un (era $atual).' : 'Saldo ficará em ${atual + q} un ($atual + $q).';
+                      }(),
+                      style: TextStyle(color: c.gold, fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  ]),
                 ),
               ],
-            ),
-            if (buscando) const LinearProgressIndicator(),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Text(
-                    "Código Lido: $codigoLido",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: nomeController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nome do Produto',
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-<<<<<<< HEAD
-                    initialValue: tipoProdutoSelecionado,
-=======
-                    value: tipoProdutoSelecionado,
->>>>>>> fix/ui-overflow-and-ia-bearer
-                    decoration: const InputDecoration(
-                      labelText: 'Tipo de Produto',
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-<<<<<<< HEAD
-                        value: 'revendido',
-                        child: Text('Revendido'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'produzido',
-                        child: Text('Produzido'),
-=======
-                      value: 'Revendido',
-                        child: Text('Revendido'),
-                      ),
-                      DropdownMenuItem(
-                      value: 'Fabricado',
-                      child: Text('Fabricado'),
->>>>>>> fix/ui-overflow-and-ia-bearer
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        tipoProdutoSelecionado = value!;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 10),
-<<<<<<< HEAD
-
-=======
->>>>>>> fix/ui-overflow-and-ia-bearer
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: loteController,
-                          decoration: const InputDecoration(labelText: 'Lote de Fabricação'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextField(
-                          controller: quantidadeController,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-<<<<<<< HEAD
-                          decoration: const InputDecoration(labelText: 'Quantidade'),
-=======
-                          decoration: const InputDecoration(
-                            labelText: 'Quantidade em Estoque',
-                          ),
->>>>>>> fix/ui-overflow-and-ia-bearer
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selecionarDataValidade(context),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(
-                              labelText: 'Data de Validade',
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _dataValidadeSelecionada == null
-                                        ? 'Selecionar'
-                                        : '${_dataValidadeSelecionada!.day.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.month.toString().padLeft(2, '0')}/${_dataValidadeSelecionada!.year}',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: _dataValidadeSelecionada == null ? Theme.of(context).hintColor : null,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const Icon(Icons.calendar_month, size: 20),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Data de Entrada',
-                          ),
-                          child: Text(
-                            'Hoje (Automático)',
-                            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Bloco Financeiro do Cintra (Com Alerta de Margem)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _alertaMargem
-                          ? Colors.red.withOpacity(0.05)
-                          : Colors.blue.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: _alertaMargem
-                          ? Border.all(color: Colors.red, width: 1.5)
-                          : null,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Precificação",
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _alertaMargem ? Colors.red : Colors.blue,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: valorCompraController,
-                                inputFormatters: [MoedaFormatter()],
-                                keyboardType: TextInputType.number,
-                                decoration: const InputDecoration(
-                                  labelText: 'Custo Unitário (R\$)',
-                                  prefixText: 'R\$ ',
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: TextField(
-                                controller: markupController,
-<<<<<<< HEAD
-                                keyboardType: TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                decoration: const InputDecoration(
-                                  labelText: 'Margem (Ex: 2.0)',
-=======
-                                keyboardType:
-                                    const TextInputType.numberWithOptions(
-                                      decimal: true,
-                                    ),
-                                decoration: InputDecoration(
-                                  labelText: 'Margem de Lucro (Markup)',
-                                  enabledBorder: _alertaMargem
-                                      ? const UnderlineInputBorder(
-                                          borderSide: BorderSide(
-                                            color: Colors.red,
-                                          ),
-                                        )
-                                      : null,
->>>>>>> fix/ui-overflow-and-ia-bearer
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (_alertaMargem)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 8.0),
-                            child: Text(
-                              "⚠️ Risco de Prejuízo: Margem muito baixa para cobrir custos fixos!",
-                              style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: valorVendaController,
-                          readOnly: true,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _alertaMargem ? Colors.red : Colors.green,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: 'Preço de Venda Sugerido (R\$)',
-                            prefixText: 'R\$ ',
-                            filled: true,
-                            fillColor: _alertaMargem
-                                ? Colors.red.shade50
-                                : Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-                  ElevatedButton(
-                    onPressed: salvar,
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(50),
-                      backgroundColor: _alertaMargem ? Colors.red : null,
-                      foregroundColor: _alertaMargem ? Colors.white : null,
-                    ),
-                    child: Text(
-                      _alertaMargem
-                          ? "ATENÇÃO: Salvar com Risco"
-                          : "Salvar no Banco de Dados",
-                    ),
-                  ),
-                ],
+              if (_origem == 'Fabricado') _blocoInsumos(c, revendidos),
+              _blocoPreco(c),
+              const SizedBox(height: 16),
+              CicBotao(
+                _margemBaixa ? 'ATENÇÃO: salvar com risco de margem baixa' : 'Salvar no estoque',
+                icone: _margemBaixa ? LucideIcons.triangleAlert : LucideIcons.circleCheck,
+                perigo: _margemBaixa,
+                largo: true,
+                carregando: _salvando,
+                onPressed: _salvar,
               ),
-            ),
-          ],
+            ]),
+          ),
         ),
       ),
+    ]);
+  }
+
+  Widget _linha(List<Widget> filhos, {List<int>? pesos}) => Padding(
+    padding: const EdgeInsets.only(bottom: 16),
+    child: LayoutBuilder(builder: (context, b) {
+      if (b.maxWidth < 560) {
+        return Column(children: [for (final f in filhos) Padding(padding: const EdgeInsets.only(bottom: 14), child: f)]);
+      }
+      return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        for (var i = 0; i < filhos.length; i++) ...[
+          if (i > 0) const SizedBox(width: 14),
+          Expanded(flex: pesos?[i] ?? 1, child: filhos[i]),
+        ],
+      ]);
+    }),
+  );
+
+  Widget _tipoBtn(CicPalette c, String t) {
+    final ativo = _origem == t;
+    return GestureDetector(
+      onTap: () => setState(() => _origem = t),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 13),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: ativo ? c.goldBg : c.input,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: ativo ? c.gold : c.inputBorder),
+        ),
+        child: Text(t, style: TextStyle(color: ativo ? c.gold : c.textMuted, fontSize: 12, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
+  Widget _campoValidade(CicPalette c) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text('DATA DE VALIDADE (FIFO)', style: TextStyle(color: c.textMuted, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6)),
+    const SizedBox(height: 6),
+    Row(children: [
+      Expanded(
+        child: OutlinedButton.icon(
+          onPressed: () async {
+            final d = await showDatePicker(
+              context: context,
+              initialDate: _validade ?? DateTime.now().add(const Duration(days: 90)),
+              firstDate: DateTime(2000),
+              lastDate: DateTime(2100),
+            );
+            if (d != null) setState(() => _validade = d);
+          },
+          icon: Icon(LucideIcons.calendar, size: 15, color: c.gold),
+          label: Text(_validade == null ? 'Sem validade' : dataCurta(_validade), style: TextStyle(color: c.text, fontSize: 13)),
+          style: OutlinedButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            side: BorderSide(color: c.inputBorder),
+            backgroundColor: c.input,
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      if (_validade != null) IconButton(onPressed: () => setState(() => _validade = null), icon: Icon(LucideIcons.x, size: 16, color: c.textMuted)),
+    ]),
+  ]);
+
+  Widget _banner(CicPalette c, ({String tipo, String texto}) m) {
+    final (cor, icone) = switch (m.tipo) {
+      'sucesso' => (c.emerald, LucideIcons.circleCheck),
+      'erro' => (c.red, LucideIcons.triangleAlert),
+      _ => (const Color(0xFF60A5FA), LucideIcons.sparkles),
+    };
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: cor.withValues(alpha: 0.10), borderRadius: BorderRadius.circular(12), border: Border.all(color: cor.withValues(alpha: 0.4))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icone, size: 16, color: cor),
+        const SizedBox(width: 10),
+        Expanded(child: Text(m.texto, style: TextStyle(color: cor, fontSize: 12, fontWeight: FontWeight.w600, height: 1.35))),
+      ]),
+    );
+  }
+
+  Widget _blocoInsumos(CicPalette c, List<Produto> revendidos) {
+    final disponiveis = revendidos.where((p) => !_insumos.any((i) => i.codigo == p.codigo)).toList();
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: c.sub, borderRadius: BorderRadius.circular(12), border: Border.all(color: c.amberBorder.withValues(alpha: 0.6))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(LucideIcons.layers, size: 15, color: c.amber),
+          const SizedBox(width: 8),
+          Expanded(child: Text('Insumos do combo fabricado', style: TextStyle(color: c.amber, fontSize: 12, fontWeight: FontWeight.w800))),
+          Text('Custo = soma dos insumos', style: TextStyle(color: c.textMuted, fontSize: 10.5)),
+        ]),
+        const SizedBox(height: 10),
+        if (revendidos.isEmpty)
+          Text('Cadastre produtos revendidos primeiro para compor os insumos.', style: TextStyle(color: c.textMuted, fontSize: 12))
+        else ...[
+          DropdownButtonFormField<String>(
+            key: ValueKey('insumo-${_insumos.length}'),
+            initialValue: null,
+            isExpanded: true,
+            dropdownColor: c.card,
+            hint: Text('Adicionar insumo do estoque...', style: TextStyle(color: c.textMuted, fontSize: 12.5)),
+            style: TextStyle(color: c.text, fontSize: 12.5),
+            decoration: const InputDecoration(),
+            items: [for (final p in disponiveis) DropdownMenuItem(value: p.codigo, child: Text('${p.nome} (custo ${brl(p.valorCompra)})', overflow: TextOverflow.ellipsis))],
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() => _insumos.add((codigo: v, qtd: 1)));
+              _recalcularCustoInsumos();
+            },
+          ),
+          for (var i = 0; i < _insumos.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(children: [
+                Expanded(child: Text(e.estoque.where((x) => x.codigo == _insumos[i].codigo).firstOrNull?.nome ?? _insumos[i].codigo, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.text, fontSize: 12))),
+                IconButton(visualDensity: VisualDensity.compact, onPressed: _insumos[i].qtd > 1 ? () { setState(() => _insumos[i] = (codigo: _insumos[i].codigo, qtd: _insumos[i].qtd - 1)); _recalcularCustoInsumos(); } : null, icon: Icon(LucideIcons.minus, size: 14, color: c.textSoft)),
+                Text('${_insumos[i].qtd}', style: fonteMono(context, size: 12)),
+                IconButton(visualDensity: VisualDensity.compact, onPressed: () { setState(() => _insumos[i] = (codigo: _insumos[i].codigo, qtd: _insumos[i].qtd + 1)); _recalcularCustoInsumos(); }, icon: Icon(LucideIcons.plus, size: 14, color: c.gold)),
+                IconButton(visualDensity: VisualDensity.compact, onPressed: () { setState(() => _insumos.removeAt(i)); _recalcularCustoInsumos(); }, icon: Icon(LucideIcons.x, size: 14, color: c.red)),
+              ]),
+            ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _blocoPreco(CicPalette c) {
+    final risco = _margemBaixa;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: risco ? c.redBg : c.sub,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: risco ? c.redBorder : c.subBorder),
+        boxShadow: risco && !c.isLight ? [BoxShadow(color: const Color(0xFFEF4444).withValues(alpha: 0.15), blurRadius: 15)] : null,
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Expanded(child: Text('PRECIFICAÇÃO & MARGEM ANTI-FALÊNCIA', style: TextStyle(color: risco ? c.red : c.gold, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
+        ]),
+        const SizedBox(height: 4),
+        Text('Fórmula: Venda = Custo × Markup', style: TextStyle(color: c.textMuted, fontSize: 11)),
+        const SizedBox(height: 14),
+        LayoutBuilder(builder: (context, b) {
+          final campos = [
+            CicCampo(rotulo: 'Custo unitário (R\$) *', controller: _custo, teclado: const TextInputType.numberWithOptions(decimal: true), dica: '0,00', onChanged: (_) => _recalcularVenda()),
+            CicCampo(rotulo: 'Markup (multiplicador)', controller: _markup, teclado: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => _recalcularVenda()),
+            CicCampo(rotulo: 'Preço de venda (R\$)', controller: _venda, teclado: const TextInputType.numberWithOptions(decimal: true), dica: '0,00', onChanged: (_) => _vendaMudou()),
+          ];
+          if (b.maxWidth < 560) return Column(children: [for (final f in campos) Padding(padding: const EdgeInsets.only(bottom: 12), child: f)]);
+          return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            for (var i = 0; i < campos.length; i++) ...[if (i > 0) const SizedBox(width: 14), Expanded(child: campos[i])],
+          ]);
+        }),
+        Text('Ex: 2,00 = 100% de lucro sobre o custo', style: TextStyle(color: c.textMuted, fontSize: 10.5)),
+        if (risco)
+          Container(
+            margin: const EdgeInsets.only(top: 14),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: c.redBg, borderRadius: BorderRadius.circular(10), border: Border.all(color: c.redBorder)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(LucideIcons.triangleAlert, size: 16, color: c.red),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text.rich(TextSpan(style: TextStyle(color: c.red, fontSize: 12, height: 1.4), children: const [
+                  TextSpan(text: 'Risco de prejuízo (limitador anti-falência). ', style: TextStyle(fontWeight: FontWeight.w800)),
+                  TextSpan(text: 'Markup abaixo de 1,30x (margem menor que 30%) dificilmente cobre os custos fixos (aluguel, luz, taxas de cartão). Recomendamos no mínimo 1,50x ou 2,00x.'),
+                ])),
+              ),
+            ]),
+          ),
+      ]),
     );
   }
 }

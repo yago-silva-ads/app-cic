@@ -1,0 +1,14 @@
+name: cic_domain
+description: Camada de domínio portátil do APP-CIC (Estoque, Curva ABC abc-v1 e guarda de IA). Dart puro, sem Flutter.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  timezone: ^0.10.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^5.0.0

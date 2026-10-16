@@ -49,3 +49,7 @@ app.*.map.json
 
 # Segredos e Chaves de API
 lib/secrets.dart
+
+# Flutter clonado no build da Vercel
+/flutter/
+/build/
