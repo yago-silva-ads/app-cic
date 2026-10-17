@@ -1,4 +1,4 @@
-import { assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import { deepStrictEqual as assertEquals } from 'node:assert';
 import { preco } from '../preco.ts';
 
 Deno.test('normaliza preços brasileiros e ponto decimal', () => {

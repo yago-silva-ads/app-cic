@@ -1,6 +1,6 @@
 // Pesquisa de preços para o teste de campo. A chave do buscador fica somente
 // nos secrets do Supabase; o app recebe apenas ofertas normalizadas e fontes.
-import { preco } from './preco.ts';
+import { buscarOfertas } from './busca.ts';
 
 const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -69,23 +69,8 @@ Deno.serve(async (req) => {
   const nome = String(produto.nome ?? '').trim().slice(0, 120);
   const codigo = String(produto.codigo ?? '').trim().slice(0, 32);
   if (!nome) return json(400, { erro: 'produto_sem_nome' }, req);
-  const chave = env('BRAVE_SEARCH_API_KEY');
-  if (!chave) return json(200, { ofertas: [], aviso: 'Configure BRAVE_SEARCH_API_KEY nos secrets do Supabase para ativar a busca externa.' }, req);
-  const q = encodeURIComponent(`${nome} ${codigo} preço Brasil comprar`);
-  const busca = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${q}&country=br&search_lang=pt-br&count=10`, {
-    headers: { Accept: 'application/json', 'X-Subscription-Token': chave },
+  const resultado = await buscarOfertas(nome, codigo, {
+    geminiKey: env('GEMINI_API_KEY'), geminiModel: env('GEMINI_MODEL'), braveKey: env('BRAVE_SEARCH_API_KEY'),
   });
-  if (!busca.ok) return json(502, { erro: 'busca_indisponivel' }, req);
-  const dados = await busca.json();
-  const ofertas: Array<{ preco: number; fonte: string; url: string; coletadaEm: string }> = [];
-  for (const item of (dados.web?.results ?? [])) {
-    const texto = `${item.title ?? ''} ${item.description ?? ''}`;
-    const p = preco(texto);
-    if (p == null) continue;
-    const url = String(item.url ?? '');
-    try { if (new URL(url).protocol !== 'https:') continue; } catch { continue; }
-    if (!url || ofertas.some((x) => x.url === url)) continue;
-    ofertas.push({ preco: p, fonte: String(item.profile?.long_name ?? item.meta_url?.hostname ?? 'Fonte externa').slice(0, 120), url, coletadaEm: new Date().toISOString() });
-  }
-  return json(200, { ofertas: ofertas.slice(0, 8), consultadoEm: new Date().toISOString(), aviso: ofertas.length < 2 ? 'Encontramos poucas ofertas; valide o produto e o código de barras antes de alterar o preço.' : null }, req);
+  return json(resultado.erro ? 502 : 200, resultado, req);
 });
