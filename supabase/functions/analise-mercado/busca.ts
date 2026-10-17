@@ -3,7 +3,7 @@ import { preco } from './preco.ts';
 
 export type Oferta = { preco: number; fonte: string; url: string; coletadaEm: string };
 export type ConfigBusca = { geminiKey?: string; geminiModel?: string; braveKey?: string };
-export type ResultadoBusca = { ofertas: Oferta[]; aviso: string | null; consultadoEm?: string; erro?: string };
+export type ResultadoBusca = { ofertas: Oferta[]; aviso: string | null; consultadoEm?: string; erro?: string; diagnostico?: string[] };
 type Registro = Record<string, unknown>;
 const obj = (v: unknown): Registro => v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Registro : {};
 const lista = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
@@ -85,12 +85,17 @@ export async function buscarOfertas(nome: string, codigo: string, config: Config
   const ordem = provedores(config);
   if (!ordem.length) return { ofertas: [], aviso: 'Configure GEMINI_API_KEY ou BRAVE_SEARCH_API_KEY nos secrets do Supabase para ativar a busca externa.' };
   let respondeu = false;
-  for (const provedor of ordem) {
+  const diagnostico: string[] = [];  // só provedor, HTTP e status do Google: nada de chave, prompt ou URL
+  // Mesma cadeia do ia-consultor: modelos antigos são aposentados (404) e os grandes às vezes dão 503.
+  const modelos = [...new Set([config.geminiModel?.trim(), 'gemini-3.5-flash', 'gemini-flash-latest',
+    'gemini-flash-lite-latest', 'gemini-3.5-flash-lite'].filter((m): m is string => !!m && /^[a-zA-Z0-9._-]+$/.test(m)))];
+  const tentativas: Array<{ provedor: 'gemini' | 'brave'; modelo: string }> = ordem.flatMap(
+    (p): Array<{ provedor: 'gemini' | 'brave'; modelo: string }> =>
+      p === 'gemini' ? modelos.map((m) => ({ provedor: p, modelo: m })) : [{ provedor: p, modelo: '' }]);
+  for (const { provedor, modelo } of tentativas) {
     try {
       let resposta: Response;
       if (provedor === 'gemini') {
-        const modelo = config.geminiModel?.trim() || 'gemini-2.5-flash';
-        if (!/^[a-zA-Z0-9._-]+$/.test(modelo)) continue;
         resposta = await requisitar(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': config.geminiKey!.trim() },
@@ -109,7 +114,12 @@ export async function buscarOfertas(nome: string, codigo: string, config: Config
           signal: AbortSignal.timeout(8_000),
         });
       }
-      if (!resposta.ok) continue;
+      if (!resposta.ok) {
+        let status = '';
+        try { status = texto(obj(obj(await resposta.json()).error).status).slice(0, 40); } catch { /* corpo não-JSON */ }
+        diagnostico.push(`${provedor}${modelo ? '/' + modelo : ''}:${resposta.status}${status ? ':' + status : ''}`);
+        continue;
+      }
       const dados: unknown = await resposta.json();
       // JSON de erro ou formato inesperado não contam como uma busca vazia bem-sucedida.
       const valido = provedor === 'gemini' ? Array.isArray(obj(dados).candidates) : Array.isArray(obj(obj(dados).web).results);
@@ -118,10 +128,11 @@ export async function buscarOfertas(nome: string, codigo: string, config: Config
       const ofertas = provedor === 'gemini' ? ofertasGemini(dados, agora) : ofertasBrave(dados, agora);
       if (ofertas.length) return { ofertas, consultadoEm: agora,
         aviso: ofertas.length < 2 ? 'Encontramos poucas ofertas; valide o produto e o código de barras antes de alterar o preço.' : null };
-    } catch {
+    } catch (e) {
+      diagnostico.push(`${provedor}:${e instanceof Error ? e.name : 'erro'}`);
       // Sem logs de respostas, prompts, headers ou URLs sensíveis. Tenta o próximo configurado.
     }
   }
   return respondeu ? { ofertas: [], consultadoEm: agora, aviso: 'Não encontramos ofertas com preço e fonte verificáveis. Confira o produto e tente novamente mais tarde.' } :
-    { ofertas: [], erro: 'busca_indisponivel', aviso: 'Os provedores configurados estão indisponíveis ou sem cota. Tente novamente mais tarde.' };
+    { ofertas: [], erro: 'busca_indisponivel', diagnostico, aviso: 'Os provedores configurados estão indisponíveis ou sem cota. Tente novamente mais tarde.' };
 }
