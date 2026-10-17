@@ -165,7 +165,9 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
       final r = await AnaliseMercadoService().analisar(selecionado!);
       if (mounted) setState(() => _mercado = r);
     } catch (err) {
-      if (mounted) aviso(context, '$err', erro: true);
+      // StateError traz texto pronto para o lojista; o resto vira mensagem simples, sem detalhe técnico.
+      final msg = err is StateError ? err.message : 'Não foi possível consultar o mercado agora. Tente novamente mais tarde.';
+      if (mounted) aviso(context, msg, erro: true);
     } finally { if (mounted) setState(() => _mercadoCarregando = false); }
   }
 

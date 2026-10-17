@@ -25,7 +25,11 @@ class AnaliseMercadoService {
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token', 'apikey': Config.supabaseAnonKey},
       body: jsonEncode({'produto': {'nome': nome, 'codigo': codigo, 'precoAtual': 0, 'custo': 0}}),
     ).timeout(const Duration(seconds: 12));
-    if (resposta.statusCode != 200) throw StateError('A pesquisa de mercado não está disponível agora (${resposta.statusCode}).');
+    if (resposta.statusCode == 404) {
+      throw StateError('A pesquisa de mercado ainda está sendo ativada para o teste de campo. Em breve ela aparece aqui.');
+    }
+    if (resposta.statusCode == 429) throw StateError('Muitas consultas seguidas. Aguarde um minuto e tente de novo.');
+    if (resposta.statusCode != 200) throw StateError('A pesquisa de mercado não está disponível agora. Tente novamente mais tarde.');
     final body = jsonDecode(utf8.decode(resposta.bodyBytes)) as Map<String, dynamic>;
     final ofertas = [
       for (final item in (body['ofertas'] as List? ?? const []))
