@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'repository.dart';
+import '../core/convite.dart';
 
 /// Login, cadastro e sessão via Supabase Auth.
 ///
@@ -129,10 +130,12 @@ class AuthService {
     required String nome,
     required String lojaNome,
     String documento = '',
+    String? convite,
   }) async {
     final e = limpar(email).toLowerCase();
     final n = limpar(nome, 60);
     final l = limpar(lojaNome, 80);
+    final slug = validarConvite(convite);
     if (!emailValido(e) || n.isEmpty || l.isEmpty) {
       throw ErroCic('Preencha todos os campos obrigatórios.');
     }
@@ -143,7 +146,13 @@ class AuthService {
       final r = await _auth.signUp(
         email: e,
         password: senha,
-        data: {'nome': n, 'lojaNome': l, 'documento': limpar(documento, 20)},
+        data: {
+          'nome': n,
+          'lojaNome': l,
+          'documento': limpar(documento, 20),
+          if (slug != null) 'convite': slug,
+          if (slug != null) 'origem': 'leadforge',
+        },
         emailRedirectTo: kIsWeb ? Uri.base.origin : null,
       );
       // Resultado indistinguível para evitar enumeração de contas pelo cadastro.

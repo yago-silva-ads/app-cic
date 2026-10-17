@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../core/theme.dart';
+import '../core/convite.dart';
 import '../data/auth_service.dart';
 import '../data/repository.dart';
 import '../ui/widgets.dart';
@@ -22,12 +24,20 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _carregando = false;
   String? _erro;
   String? _ok;
+  String? _convite;
 
   final _email = TextEditingController();
   final _senha = TextEditingController();
   final _nome = TextEditingController();
   final _loja = TextEditingController();
   final _doc = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _convite = kIsWeb ? validarConvite(Uri.base.queryParameters['convite']) : null;
+    _cadastro = _convite != null;
+  }
 
   @override
   void dispose() {
@@ -61,6 +71,7 @@ class _AuthScreenState extends State<AuthScreen> {
           nome: _nome.text,
           lojaNome: _loja.text,
           documento: _doc.text,
+          convite: _convite,
         );
         if (!logado && mounted) {
           setState(() {
@@ -142,6 +153,8 @@ class _AuthScreenState extends State<AuthScreen> {
                       children: [
                         _alternador(c),
                         const SizedBox(height: 20),
+                        if (_convite != null)
+                          _caixaMsg(c, 'Convite do teste de campo: 4 semanas grátis, sem cartão. Em troca, um formulário de 2 minutos por semana.', erro: false),
                         if (_erro != null) _caixaMsg(c, _erro!, erro: true),
                         if (_ok != null) _caixaMsg(c, _ok!, erro: false),
                         _botaoGoogle(c),
