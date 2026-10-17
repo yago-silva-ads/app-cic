@@ -1,0 +1,22 @@
+{
+  "candidates": [{
+    "content": {"parts": [{"text": "Mercado A: arroz por R$ 12,90. Mercado B: arroz por R$ 13.50. Sem fonte: R$ 0,01 em https://inventada.example/oferta. Repetida A: R$ 11,90. Insegura: R$ 9,90. Índice inválido: R$ 8,90. Apenas menciona a loja. A por R$ 10,00 e B por R$ 20,00."}]},
+    "groundingMetadata": {
+      "groundingChunks": [
+        {"web": {"uri": "https://mercado-a.example/arroz", "title": "Mercado A"}},
+        {"web": {"uri": "https://mercado-b.example/arroz", "title": "Mercado B"}},
+        {"web": {"uri": "http://insegura.example/arroz", "title": "Insegura"}},
+        {"web": {"uri": "https://apenas-titulo.example/arroz", "title": "R$ 1,00"}}
+      ],
+      "groundingSupports": [
+        {"segment": {"text": "Mercado A: arroz por R$ 12,90."}, "groundingChunkIndices": [0]},
+        {"segment": {"text": "Mercado B: arroz por R$ 13.50."}, "groundingChunkIndices": [1]},
+        {"segment": {"text": "Repetida A: R$ 11,90."}, "groundingChunkIndices": [0]},
+        {"segment": {"text": "Insegura: R$ 9,90."}, "groundingChunkIndices": [2]},
+        {"segment": {"text": "Índice inválido: R$ 8,90."}, "groundingChunkIndices": [99]},
+        {"segment": {"text": "Apenas menciona a loja."}, "groundingChunkIndices": [3]},
+        {"segment": {"text": "A por R$ 10,00 e B por R$ 20,00."}, "groundingChunkIndices": [0, 1]}
+      ]
+    }
+  }]
+}
