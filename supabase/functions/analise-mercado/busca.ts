@@ -85,6 +85,25 @@ function resultadosTool(valor: unknown): unknown[] {
     ...lista(obj(r.browser).results), ...lista(obj(r.search_results).results)];
 }
 
+/** Estrutura da resposta do Groq sem nenhum texto: tipos de ferramenta, nomes de campos e contagens. */
+export function formatoGroq(dados: unknown): string {
+  const mensagem = obj(obj(lista(obj(dados).choices)[0]).message);
+  const tools = lista(mensagem.executed_tools).map(obj);
+  const tipos = tools.map((f) => texto(f.name || f.type) || '?').join('+') || 'nenhuma';
+  const chaves = tools[0] ? Object.keys(tools[0]).sort().join('|').slice(0, 120) : '-';
+  let total = 0, https = 0, comPreco = 0;
+  for (const f of tools) {
+    const brutos = [...lista(obj(f.search_results).results), ...resultadosTool(f.output), ...resultadosTool(f.browser_results), ...resultadosTool(f.browser)];
+    for (const r of brutos.map(obj)) {
+      total++;
+      if (urlHttps(r.url)) https++;
+      if (/R\$\s*[0-9]/i.test(`${texto(r.title)} ${texto(r.content) || texto(r.text)}`)) comPreco++;
+    }
+  }
+  const msgChaves = Object.keys(mensagem).sort().join('|').slice(0, 80);
+  return `tools=${tools.length}:${tipos};campos=${chaves};msg=${msgChaves};res=${total};https=${https};rs=${comPreco}`;
+}
+
 export function ofertasGroq(dados: unknown, agora: string): Oferta[] {
   const mensagem = obj(obj(lista(obj(dados).choices)[0]).message);
   const ofertas: Oferta[] = [];
@@ -92,7 +111,9 @@ export function ofertasGroq(dados: unknown, agora: string): Oferta[] {
   for (const valor of lista(mensagem.executed_tools)) {
     const ferramenta = obj(valor);
     const tipo = texto(ferramenta.name || ferramenta.type);
-    if (tipo && !['browser_search', 'web_search', 'search'].includes(tipo)) continue;
+    // Groq devolve 'browser.search', 'browser.open' e 'browser.find' (com ponto); versões antigas usavam
+    // 'browser_search'. Qualquer outra ferramenta (ex.: código) não traz resultado de busca.
+    if (tipo && !tipo.startsWith('browser.') && !['browser_search', 'web_search', 'search'].includes(tipo)) continue;
     const resultados = [...lista(obj(ferramenta.search_results).results),
       ...resultadosTool(ferramenta.output), ...resultadosTool(ferramenta.browser_results),
       ...resultadosTool(ferramenta.browser)];
@@ -151,7 +172,7 @@ export async function buscarOfertas(nome: string, codigo: string, config: Config
             tools: [{ type: 'browser_search' }], tool_choice: 'required',
             reasoning_effort: 'low', max_completion_tokens: 4096, stream: false,
           }),
-          signal: AbortSignal.timeout(15_000),
+          signal: AbortSignal.timeout(35_000),
         });
       } else if (provedor === 'gemini') {
         resposta = await requisitar(`https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`, {
@@ -199,7 +220,8 @@ export async function buscarOfertas(nome: string, codigo: string, config: Config
         provedor === 'gemini' ? ofertasGemini(dados, agora) : ofertasBrave(dados, agora);
       if (ofertas.length) return { ofertas, consultadoEm: agora,
         aviso: ofertas.length < 2 ? 'Encontramos poucas ofertas; valide o produto e o código de barras antes de alterar o preço.' : null };
-      diagnostico.push(`${provedor}${modelo ? '/' + modelo : ''}:200:sem_ofertas_verificaveis`);
+      diagnostico.push(`${provedor}${modelo ? '/' + modelo : ''}:200:sem_ofertas_verificaveis` +
+        (provedor === 'groq' ? `:${formatoGroq(dados)}` : ''));
     } catch (e) {
       const tipo = e instanceof Error && ['AbortError', 'TimeoutError', 'TypeError', 'SyntaxError'].includes(e.name) ? e.name : 'erro';
       diagnostico.push(`${provedor}${modelo ? '/' + modelo : ''}:rede:${tipo}`);

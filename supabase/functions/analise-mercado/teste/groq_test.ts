@@ -117,6 +117,29 @@ Deno.test('resposta 200 sem resultados estruturados não finge busca validada', 
   const r = await buscarOfertas('Arroz privado', '', { groqKey2: 'segredo-chave' }, () =>
     json({ choices: [{ message: { content: 'Preço inventado R$ 0,01 https://inventada.example/' } }] }), agora);
   assert.deepEqual(r.ofertas, []);
-  assert.deepEqual(r.diagnostico, ['groq/openai/gpt-oss-120b:200:sem_ofertas_verificaveis', 'groq/openai/gpt-oss-20b:200:sem_ofertas_verificaveis']);
+  assert.equal(r.diagnostico?.length, 2);
+  assert.ok(r.diagnostico?.[0].startsWith('groq/openai/gpt-oss-120b:200:sem_ofertas_verificaveis:tools=0:nenhuma'));
+  assert.ok(r.diagnostico?.[1].startsWith('groq/openai/gpt-oss-20b:200:sem_ofertas_verificaveis:'));
+  // o raio-X mostra só estrutura: nada do texto gerado, nem preço, nem URL
+  assert.ok(!JSON.stringify(r.diagnostico).includes('inventad'));
+  assert.ok(!JSON.stringify(r.diagnostico).includes('0,01'));
   assert.ok(!JSON.stringify(r).includes('segredo-chave'));
+});
+
+Deno.test('formato real do Groq (17/10/2026): browser.search / browser.open com search_results', () => {
+  const dados = { choices: [{ message: { role: 'assistant', content: 'Texto gerado com R$ 1,00 que nunca é usado', reasoning: '',
+    executed_tools: [
+      { index: 0, type: 'browser.search', name: 'browser.search', arguments: '{}', output: '',
+        search_results: { results: [
+          { title: 'Arroz Tipo 1 5kg - Loja A', url: 'https://loja-a.com.br/arroz', content: 'Por R$ 27,90 à vista' },
+          { title: 'Arroz sem preço', url: 'https://loja-b.com.br/arroz', content: 'Consulte' },
+          { title: 'Arroz http', url: 'http://loja-c.com.br/arroz', content: 'R$ 20,00' },
+        ] } },
+      { index: 1, type: 'browser.open', name: 'browser.open', arguments: '{}', output: '',
+        search_results: { results: [{ title: 'Arroz 5kg', url: 'https://loja-d.com.br/p', content: 'Oferta R$ 25,49' }] } },
+      { index: 2, type: 'python', name: 'python', output: 'R$ 1,00', search_results: { results: [{ url: 'https://x.com.br', content: 'R$ 1,00' }] } },
+    ] } }] };
+  const ofertas = ofertasGroq(dados, agora);
+  assert.deepEqual(ofertas.map((o) => o.preco), [27.9, 25.49]);
+  assert.deepEqual(ofertas.map((o) => o.fonte), ['loja-a.com.br', 'loja-d.com.br']);
 });

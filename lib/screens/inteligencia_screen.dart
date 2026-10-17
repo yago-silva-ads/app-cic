@@ -342,7 +342,7 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
           Text('Análise de mercado e preço', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
           Text('Busca ofertas públicas e sugere aumentar, reduzir ou manter o preço, sempre respeitando o custo informado.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.35)),
         ])),
-        CicBotao(_mercadoCarregando ? 'Consultando...' : 'Analisar um produto', icone: LucideIcons.search, compacto: true, carregando: _mercadoCarregando, onPressed: _mercadoCarregando || e.estoque.isEmpty ? null : _escolherProdutoMercado),
+        CicBotao(_mercadoCarregando ? 'Pesquisando lojas (até 1 min)...' : 'Analisar um produto', icone: LucideIcons.search, compacto: true, carregando: _mercadoCarregando, onPressed: _mercadoCarregando || e.estoque.isEmpty ? null : _escolherProdutoMercado),
       ]),
       if (_mercado != null) ...[const SizedBox(height: 14), _resultadoMercado(c, _mercado!)],
     ]),
