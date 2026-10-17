@@ -1,121 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/config.dart';
 import '../core/theme.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
 
-enum _Estado { verificando, ok, atencao, erro }
-
-class _Check {
-  _Check(this.titulo, this.descricao);
-  final String titulo;
-  final String descricao;
-  _Estado estado = _Estado.verificando;
-  String detalhe = '';
-}
-
-/// Ajuda e diagnóstico REAL: cada item testa o serviço de verdade. Nada é
-/// mostrado como "operacional" sem ter sido verificado agora.
-class SuporteScreen extends StatefulWidget {
+/// Ajuda voltada ao lojista. Diagnósticos de banco, códigos internos e nomes
+/// de provedores ficam fora da experiência do cliente.
+class SuporteScreen extends StatelessWidget {
   const SuporteScreen({super.key, required this.estado});
   final AppState estado;
 
-  @override
-  State<SuporteScreen> createState() => _SuporteScreenState();
-}
-
-class _SuporteScreenState extends State<SuporteScreen> {
-  late List<_Check> _checks;
-  bool _rodando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checks = _novos();
-    _rodar();
-  }
-
-  List<_Check> _novos() => [
-    _Check('Banco de dados (Supabase)', 'Leitura do seu estoque com a sua sessão'),
-    _Check('Atualização v3 do banco', 'Venda atômica, código único por loja e movimentações'),
-    _Check('Consultor de IA', 'Função segura que fala com as IAs (Gemini, Groq)'),
-    _Check('Sessão e isolamento', 'Dados presos à sua loja pela sessão'),
-  ];
-
-  Future<void> _rodar() async {
-    if (_rodando) return;
-    setState(() {
-      _rodando = true;
-      _checks = _novos();
-    });
-    final db = Supabase.instance.client;
-
-    // 1. Banco
-    try {
-      await db.from('produtos').select('codigo').limit(1);
-      _set(0, _Estado.ok, 'Conectado');
-    } on PostgrestException catch (e) {
-      _set(0, _Estado.erro, 'Erro ${e.code ?? ''}: ${e.message}');
-    } catch (_) {
-      _set(0, _Estado.erro, 'Sem conexão com o servidor');
+  Future<void> _email(BuildContext context) async {
+    final uri = Uri(scheme: 'mailto', path: Config.supportEmail, queryParameters: {'subject': 'Ajuda com o APP-CIC'});
+    if (!await launchUrl(uri)) {
+      await Clipboard.setData(ClipboardData(text: Config.supportEmail));
+      if (context.mounted) aviso(context, 'E-mail copiado: ${Config.supportEmail}');
     }
-
-    // 2. Migração v3: chama a função com lista vazia; ela deve responder ITENS_VAZIOS.
-    try {
-      await db.rpc('registrar_venda', params: {'p_itens': <Object>[]});
-      _set(1, _Estado.atencao, 'Resposta inesperada da função');
-    } on PostgrestException catch (e) {
-      if (e.message.contains('ITENS_VAZIOS')) {
-        _set(1, _Estado.ok, 'Aplicada');
-      } else if (e.code == 'PGRST202' || e.code == '42883') {
-        _set(1, _Estado.erro, 'PENDENTE: rode supabase/migracao_v3_estoque_atomico_e_isolamento.sql no SQL Editor. Sem isso, vendas e entradas de estoque não funcionam.');
-      } else {
-        _set(1, _Estado.atencao, 'Erro ${e.code ?? ''}: ${e.message}');
-      }
-    } catch (_) {
-      _set(1, _Estado.erro, 'Sem conexão com o servidor');
-    }
-
-    // 3. IA: preflight na função (200/204 = publicada).
-    try {
-      final r = await (http.Request('OPTIONS', Uri.parse(Config.iaFunctionUrl))
-            ..headers['Origin'] = 'https://app'
-            ..headers['Access-Control-Request-Method'] = 'POST')
-          .send()
-          .timeout(const Duration(seconds: 8));
-      if (r.statusCode == 200 || r.statusCode == 204) {
-        _set(2, _Estado.ok, 'Função publicada. Perguntas objetivas funcionam mesmo sem IA.');
-      } else if (r.statusCode == 404) {
-        _set(2, _Estado.atencao, 'Função ainda não publicada. O app responde estoque, faturamento e ABC sem IA; análises abertas mostram só os dados calculados.');
-      } else {
-        _set(2, _Estado.atencao, 'Resposta ${r.statusCode} da função de IA.');
-      }
-    } catch (_) {
-      _set(2, _Estado.atencao, 'Não foi possível verificar a função de IA agora.');
-    }
-
-    // 4. Sessão
-    final u = db.auth.currentUser;
-    _set(3, u == null ? _Estado.erro : _Estado.ok, u == null ? 'Sem sessão' : 'Logado como ${u.email ?? u.id}');
-
-    if (mounted) setState(() => _rodando = false);
-  }
-
-  void _set(int i, _Estado e, String d) {
-    if (!mounted) return;
-    setState(() {
-      _checks[i].estado = e;
-      _checks[i].detalhe = d;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final c = context.c;
+    final nome = estado.usuario?.nome ?? 'lojista';
     return CicPagina(children: [
       Align(
         alignment: Alignment.topCenter,
@@ -124,94 +34,80 @@ class _SuporteScreenState extends State<SuporteScreen> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             CicCard(
               padding: const EdgeInsets.all(22),
+              gradiente: LinearGradient(colors: c.isLight ? const [Color(0xFFFEF9EE), Colors.white] : const [Color(0xFF171511), Color(0xFF121212)]),
+              borda: c.gold.withValues(alpha: 0.35),
               child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 CicIconeCaixa(LucideIcons.lifeBuoy, tom: BadgeTom.ouro, tamanho: 48),
                 const SizedBox(width: 14),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('Central de Ajuda & Status do Sistema', style: TextStyle(color: c.text, fontSize: 17, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 6),
-                    Text('APP-CIC v2.0 — frente de caixa, estoque por loja, importação de NF-e e consultor de IA aterrado em dados reais.',
-                        style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.4)),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Ajuda e suporte', style: TextStyle(color: c.text, fontSize: 18, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 6),
+                  Text('Olá, $nome. Encontre orientações rápidas ou fale com a equipe do APP-CIC.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.45)),
+                  const SizedBox(height: 12),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    CicBotao('Enviar e-mail', icone: LucideIcons.mail, compacto: true, onPressed: () => _email(context)),
+                    CicBotao('Copiar e-mail', icone: LucideIcons.copy, secundario: true, compacto: true, onPressed: () async { await Clipboard.setData(ClipboardData(text: Config.supportEmail)); if (context.mounted) aviso(context, 'E-mail copiado.'); }),
                   ]),
-                ),
+                ])),
               ]),
             ),
             const SizedBox(height: 16),
             CicCard(
               padding: const EdgeInsets.all(22),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                Row(children: [
-                  Icon(LucideIcons.shieldCheck, size: 18, color: c.emerald),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('DIAGNÓSTICO AO VIVO', style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5))),
-                  CicBotao(_rodando ? 'Verificando...' : 'Verificar de novo', icone: LucideIcons.refreshCw, secundario: true, compacto: true, onPressed: _rodando ? null : _rodar),
+                Text('O que você pode fazer no app', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                CicGrid(minLargura: 240, espaco: 10, maxColunas: 2, children: [
+                  _sistema(c, LucideIcons.barcode, 'Leitor de códigos', 'Leia o código, encontre os dados do produto e cadastre estoque, lote e validade.'),
+                  _sistema(c, LucideIcons.boxes, 'Estoque e validade', 'Acompanhe saldo, lote, vencimento, custo e alertas de reposição.'),
+                  _sistema(c, LucideIcons.shoppingCart, 'Vendas e caixa', 'Registre vendas, formas de pagamento e histórico sem planilha.'),
+                  _sistema(c, LucideIcons.chartPie, 'Inteligência de negócio', 'Veja auditoria, previsão de giro, análise de mercado e sugestão de preço.'),
+                  _sistema(c, LucideIcons.fileSpreadsheet, 'Notas e entradas', 'Importe notas quando disponíveis e evite lançar a mesma entrada duas vezes.'),
+                  _sistema(c, LucideIcons.refreshCw, 'Logística reversa', 'Registre devoluções, avarias e envios ao fornecedor mantendo o histórico.'),
                 ]),
-                const SizedBox(height: 14),
-                for (final k in _checks) Padding(padding: const EdgeInsets.only(bottom: 10), child: _linha(c, k)),
               ]),
             ),
             const SizedBox(height: 16),
             CicCard(
               padding: const EdgeInsets.all(22),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('COMO USAR NO IPHONE', style: TextStyle(color: c.text, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                const SizedBox(height: 10),
-                for (final t in const [
-                  'Abra o endereço do app no Safari.',
-                  'Toque em Compartilhar e depois em "Adicionar à Tela de Início".',
-                  'Abra pelo ícone APP-CIC: roda em tela cheia, como um app.',
-                  'Na primeira vez que usar a câmera, toque em "Permitir".',
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Icon(LucideIcons.chevronRight, size: 14, color: c.gold),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(t, style: TextStyle(color: c.textSoft, fontSize: 12.5, height: 1.4))),
-                    ]),
-                  ),
+                Text('Respostas rápidas', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 12),
+                _faq(c, 'Como começo?', 'Abra Leitor de códigos, leia um produto e informe quantidade, custo e preço. Depois use o PDV para registrar as vendas.'),
+                _faq(c, 'O app altera meu preço sozinho?', 'Não. A análise compara ofertas públicas e mostra uma sugestão. Você decide se quer atualizar o cadastro.'),
+                _faq(c, 'Posso pedir um site?', 'Sim. Site, criação de páginas e automação de mensagens são serviços separados. Fale com a equipe pelo e-mail acima.'),
+                _faq(c, 'Como envio uma sugestão?', 'Use o feedback semanal em Inteligência IA. Você pode marcar opções e escrever livremente.'),
               ]),
             ),
+            const SizedBox(height: 16),
+            Text('Atendimento: ${Config.supportEmail} • Responderemos no próximo dia útil.', textAlign: TextAlign.center, style: TextStyle(color: c.textMuted, fontSize: 11)),
           ]),
         ),
       ),
     ]);
   }
 
-  Widget _linha(CicPalette c, _Check k) {
-    final (cor, rotulo) = switch (k.estado) {
-      _Estado.verificando => (c.textMuted, 'VERIFICANDO'),
-      _Estado.ok => (c.emerald, 'OK'),
-      _Estado.atencao => (c.amber, 'ATENÇÃO'),
-      _Estado.erro => (c.red, 'PROBLEMA'),
-    };
-    return CicSub(
-      padding: const EdgeInsets.all(14),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          margin: const EdgeInsets.only(top: 4),
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(color: cor, shape: BoxShape.circle, boxShadow: [BoxShadow(color: cor.withValues(alpha: 0.25), spreadRadius: 3)]),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(k.titulo, style: TextStyle(color: c.text, fontSize: 12.5, fontWeight: FontWeight.w700)),
-            Text(k.descricao, style: TextStyle(color: c.textMuted, fontSize: 11)),
-            if (k.detalhe.isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: 4), child: Text(k.detalhe, style: TextStyle(color: cor, fontSize: 11.5, height: 1.35))),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        CicBadge(rotulo, tom: switch (k.estado) {
-          _Estado.ok => BadgeTom.verde,
-          _Estado.atencao => BadgeTom.ambar,
-          _Estado.erro => BadgeTom.vermelho,
-          _Estado.verificando => BadgeTom.neutro,
-        }),
-      ]),
-    );
-  }
+  Widget _sistema(CicPalette c, IconData icon, String titulo, String texto) => CicSub(
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Icon(icon, size: 18, color: c.gold),
+      const SizedBox(width: 10),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(titulo, style: TextStyle(color: c.text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 3),
+        Text(texto, style: TextStyle(color: c.textMuted, fontSize: 11.5, height: 1.35)),
+      ])),
+    ]),
+  );
+
+  Widget _faq(CicPalette c, String pergunta, String resposta) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: Text(pergunta, style: TextStyle(color: c.text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+      iconColor: c.gold,
+      collapsedIconColor: c.textMuted,
+      children: [Align(alignment: Alignment.centerLeft, child: Text(resposta, style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.4)))],
+    ),
+  );
 }

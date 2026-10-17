@@ -264,6 +264,57 @@ class CicRepository {
     await _db.from('relatorios_ia').delete().eq('id', id).eq('empresa_id', uid);
   }, contexto: 'excluir o relatório');
 
+  Future<Map<String, dynamic>> registrarLogisticaReversa({
+    required String codigo,
+    required int quantidade,
+    required String motivo,
+    required String destino,
+    String? documento,
+    String? observacao,
+  }) => _guard(() async {
+    final r = await _db.rpc('registrar_logistica_reversa', params: {
+      'p_codigo': codigo,
+      'p_quantidade': quantidade,
+      'p_motivo': motivo,
+      'p_destino': destino,
+      'p_documento': documento,
+      'p_observacao': observacao,
+    });
+    return Map<String, dynamic>.from(r as Map);
+  }, contexto: 'registrar a logística reversa');
+
+  // ===================== TESTE DE CAMPO =====================
+
+  Future<void> salvarFeedbackCampo({
+    required int nota,
+    required List<String> aspectos,
+    required String comentario,
+    required bool recomendaria,
+    String interesseSite = 'nao_agora',
+  }) => _guard(() async {
+    await _db.from('feedback_campo').insert({
+      'semana_inicio': _inicioSemana().toIso8601String().split('T').first,
+      'nota': nota.clamp(1, 5),
+      'aspectos': aspectos,
+      'comentario': comentario.trim(),
+      'recomendaria': recomendaria,
+      'interesse_site': interesseSite,
+    });
+  }, contexto: 'enviar o feedback');
+
+  Future<bool> enviouFeedbackNestaSemana() => _guard(() async {
+    final r = await _db.from('feedback_campo').select('id')
+        .eq('empresa_id', uid)
+        .eq('semana_inicio', _inicioSemana().toIso8601String().split('T').first)
+        .limit(1);
+    return r.isNotEmpty;
+  }, contexto: 'verificar o feedback semanal');
+
+  DateTime _inicioSemana() {
+    final agora = DateTime.now();
+    return DateTime(agora.year, agora.month, agora.day).subtract(Duration(days: agora.weekday - 1));
+  }
+
   // ===================== CONTA DO ESTABELECIMENTO =====================
 
   Future<Map<String, dynamic>> conta() => _guard(() async {

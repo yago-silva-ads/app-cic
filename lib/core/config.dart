@@ -18,6 +18,8 @@ class Config {
   /// Endpoint da Edge Function de IA (a chave do Gemini fica no servidor).
   /// `--dart-define=DEMO=true`: loja de exemplo em memória, sem login (tutoriais e teste do cliente).
   static const demo = bool.fromEnvironment('DEMO');
+  static const supportEmail = String.fromEnvironment('SUPPORT_EMAIL', defaultValue: 'suporte@app-cic.com');
 
   static String get iaFunctionUrl => '$supabaseUrl/functions/v1/ia-consultor';
+  static String get marketFunctionUrl => '$supabaseUrl/functions/v1/analise-mercado';
 }

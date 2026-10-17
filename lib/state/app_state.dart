@@ -144,6 +144,18 @@ class AppState extends ChangeNotifier {
     await carregar();
   }
 
+  Future<void> registrarLogisticaReversa({
+    required String codigo,
+    required int quantidade,
+    required String motivo,
+    required String destino,
+    String? documento,
+    String? observacao,
+  }) async {
+    await repo.registrarLogisticaReversa(codigo: codigo, quantidade: quantidade, motivo: motivo, destino: destino, documento: documento, observacao: observacao);
+    await carregar();
+  }
+
   Future<String> finalizarVenda({
     required List<ItemCarrinho> itens,
     required String formaPagamento,

@@ -1,4 +1,10 @@
-# Projeto CIC 
+# APP-CIC — teste de campo para decisões de varejo
+
+O APP-CIC é oferecido gratuitamente a lojistas participantes de um teste de campo. Ele organiza estoque e vendas, audita margens e compara preços públicos para sugerir aumentar, reduzir ou manter o valor de uma mercadoria.
+
+O lojista responde um formulário semanal curto dentro do app, com checkboxes e espaço para escrever. Sites, páginas de venda e automações de mensagens são serviços separados do LeadForge e só são apresentados quando houver interesse.
+
+Consulte o [estudo de caso](docs/estudo_caso_teste_campo.md) e a [auditoria do produto](docs/auditoria_produto_leadforge.md).
 
 Bem-vindo! 
 Nosso aplicativo tem a função de ler o código de barras e auxiliá-lo a reconhecer o item através dos códigos GTIN-13 providos pela GS1.

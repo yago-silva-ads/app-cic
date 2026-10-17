@@ -255,7 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _tabelaAbc(BuildContext context, List<dom.ItemCurvaAbc> itens, bool projetado) {
     final c = context.c;
     if (itens.isEmpty) {
-      return const CicVazio(icone: LucideIcons.boxes, titulo: 'Nenhum produto cadastrado', texto: 'Cadastre produtos no Leitor GS1 ou importe uma NF-e.');
+      return const CicVazio(icone: LucideIcons.boxes, titulo: 'Nenhum produto cadastrado', texto: 'Cadastre produtos no Leitor de códigos ou importe uma NF-e.');
     }
     TextStyle cab() => TextStyle(color: c.textMuted, fontSize: 10, fontWeight: FontWeight.w800);
     return Column(children: [

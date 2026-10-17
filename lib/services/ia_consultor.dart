@@ -375,7 +375,7 @@ class IaConsultor {
         !RegExp(r'o que (eu )?tenho|meu estoque|estoque agora|quantos produtos|quantas unidades').hasMatch(t)) {
       final termo = _termos(t).join(' ');
       if (termo.isNotEmpty) {
-        return _local('Não encontrei "$termo" no seu estoque. Se você vende esse produto, cadastre-o no Leitor GS1 para eu acompanhar.');
+        return _local('Não encontrei "$termo" no seu estoque. Se você vende esse produto, cadastre-o no Leitor de códigos para eu acompanhar.');
       }
     }
 
