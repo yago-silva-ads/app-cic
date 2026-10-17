@@ -150,7 +150,7 @@ class AuthService {
           'nome': n,
           'lojaNome': l,
           'documento': limpar(documento, 20),
-          if (slug != null) 'convite': slug,
+          'convite': ?slug,
           if (slug != null) 'origem': 'leadforge',
         },
         emailRedirectTo: kIsWeb ? Uri.base.origin : null,

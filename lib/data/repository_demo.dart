@@ -278,7 +278,7 @@ class DemoRepository implements CicRepository {
     if (p.quantidade < quantidade) throw ErroCic('Estoque insuficiente para devolver ${p.nome}. Saldo atual: ${p.quantidade}.', codigo: 'ESTOQUE_INSUFICIENTE');
     p.quantidade -= quantidade;
     _devolucoes.insert(0, {'codigo': codigo, 'quantidade': quantidade, 'motivo': motivo, 'destino': destino, 'documento': documento, 'observacao': observacao, 'criado_em': DateTime.now().toUtc().toIso8601String()});
-    _movs.insert(0, Movimentacao(id: _id(), tipo: 'SAIDA', motivo: 'DEVOLUCAO', produtoCodigo: codigo, produtoNome: p.nome, quantidade: quantidade, valorUnitario: p.valorCompra, valorTotal: p.valorCompra * quantidade, dataHora: DateTime.now(), documento: documento, observacao: '$motivo • $destino${observacao == null || observacao!.isEmpty ? '' : ' • $observacao'}'));
+    _movs.insert(0, Movimentacao(id: _id(), tipo: 'SAIDA', motivo: 'DEVOLUCAO', produtoCodigo: codigo, produtoNome: p.nome, quantidade: quantidade, valorUnitario: p.valorCompra, valorTotal: p.valorCompra * quantidade, dataHora: DateTime.now(), documento: documento, observacao: '$motivo • $destino${observacao == null || observacao.isEmpty ? '' : ' • $observacao'}'));
     _gerarAlertas();
     return {'codigo': codigo, 'quantidade': quantidade, 'saldo': p.quantidade};
   }
