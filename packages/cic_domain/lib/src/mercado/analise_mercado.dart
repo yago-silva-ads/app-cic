@@ -1,15 +1,8 @@
-/// Resultado determinístico da comparação do preço da loja com o mercado.
-/// A coleta das ofertas acontece no servidor; esta regra não depende de IA.
+/// Resultado deterministico da comparacao do preco da loja com o mercado.
 enum AcaoPrecoMercado { aumentar, reduzir, manter, revisarDados }
 
 class OfertaMercado {
-  const OfertaMercado({
-    required this.precoCentavos,
-    required this.fonte,
-    required this.url,
-    this.coletadaEm,
-  });
-
+  const OfertaMercado({required this.precoCentavos, required this.fonte, required this.url, this.coletadaEm});
   final int precoCentavos;
   final String fonte;
   final String url;
@@ -17,18 +10,7 @@ class OfertaMercado {
 }
 
 class AnaliseMercado {
-  const AnaliseMercado({
-    required this.acao,
-    required this.precoAtualCentavos,
-    required this.precoSugeridoCentavos,
-    required this.medianaMercadoCentavos,
-    required this.menorPrecoCentavos,
-    required this.maiorPrecoCentavos,
-    required this.ofertasUsadas,
-    required this.confianca,
-    required this.motivo,
-  });
-
+  const AnaliseMercado({required this.acao, required this.precoAtualCentavos, required this.precoSugeridoCentavos, required this.medianaMercadoCentavos, required this.menorPrecoCentavos, required this.maiorPrecoCentavos, required this.ofertasUsadas, required this.confianca, required this.motivo});
   final AcaoPrecoMercado acao;
   final int precoAtualCentavos;
   final int precoSugeridoCentavos;
@@ -40,18 +22,11 @@ class AnaliseMercado {
   final String motivo;
 }
 
-/// Compara o preço atual com a mediana observada.
-///
-/// Limites conservadores evitam oscilações por uma única oferta. O custo é
-/// usado como piso de proteção: nenhuma recomendação fica abaixo de 20% de
-/// margem bruta quando o custo foi informado.
-AnaliseMercado analisarMercado({
-  required int precoAtualCentavos,
-  required List<OfertaMercado> ofertas,
-  int? custoCentavos,
-}) {
-  final validas = ofertas.where((o) => o.precoCentavos > 0).toList()
-    ..sort((a, b) => a.precoCentavos.compareTo(b.precoCentavos));
+/// Compara o preco atual com a mediana observada.
+/// O custo e usado como piso de protecao: nenhuma recomendacao fica abaixo
+/// de 20% de margem bruta quando o custo foi informado.
+AnaliseMercado analisarMercado({required int precoAtualCentavos, required List<OfertaMercado> ofertas, int? custoCentavos}) {
+  final validas = ofertas.where((o) => o.precoCentavos > 0).toList()..sort((a, b) => a.precoCentavos.compareTo(b.precoCentavos));
   if (precoAtualCentavos <= 0 || validas.length < 2) {
     return AnaliseMercado(
       acao: AcaoPrecoMercado.revisarDados,
@@ -62,26 +37,28 @@ AnaliseMercado analisarMercado({
       maiorPrecoCentavos: validas.isEmpty ? null : validas.last.precoCentavos,
       ofertasUsadas: validas.length,
       confianca: 0,
-      motivo: 'São necessárias pelo menos duas ofertas válidas e um preço atual para comparar.',
+      motivo: 'Sao necessarias pelo menos duas ofertas validas e um preco atual para comparar.',
     );
   }
-  final mediana = validas.length.isOdd
-      ? validas[validas.length ~/ 2].precoCentavos
-      : ((validas[validas.length ~/ 2 - 1].precoCentavos + validas[validas.length ~/ 2].precoCentavos) ~/ 2);
+  final mediana = validas.length.isOdd ? validas[validas.length ~/ 2].precoCentavos : ((validas[validas.length ~/ 2 - 1].precoCentavos + validas[validas.length ~/ 2].precoCentavos) ~/ 2);
   final piso = custoCentavos == null ? 0 : (custoCentavos * 1.20).ceil();
   final razao = precoAtualCentavos / mediana;
-  final acao = razao < 0.90
+  final abaixoDoPiso = piso > 0 && precoAtualCentavos < piso;
+  final reduzirBloqueadoPeloPiso = razao > 1.10 && piso >= precoAtualCentavos;
+  final acao = abaixoDoPiso
       ? AcaoPrecoMercado.aumentar
-      : razao > 1.10
-          ? AcaoPrecoMercado.reduzir
-          : AcaoPrecoMercado.manter;
+      : razao < 0.90
+          ? AcaoPrecoMercado.aumentar
+          : razao > 1.10 && !reduzirBloqueadoPeloPiso
+              ? AcaoPrecoMercado.reduzir
+              : AcaoPrecoMercado.manter;
   final alvo = acao == AcaoPrecoMercado.manter ? precoAtualCentavos : (mediana < piso ? piso : mediana);
   final confianca = (0.55 + validas.length.clamp(0, 8) * 0.05).clamp(0.0, 0.95).toDouble();
   final motivo = switch (acao) {
-    AcaoPrecoMercado.aumentar => 'O preço atual está mais de 10% abaixo da mediana observada.',
-    AcaoPrecoMercado.reduzir => 'O preço atual está mais de 10% acima da mediana observada.',
-    AcaoPrecoMercado.manter => 'O preço atual está dentro de uma faixa competitiva de 10% da mediana.',
-    AcaoPrecoMercado.revisarDados => 'Dados insuficientes para recomendar uma alteração.',
+    AcaoPrecoMercado.aumentar => abaixoDoPiso ? 'O preco atual esta abaixo do piso minimo de margem; aumente ate esse piso antes de competir.' : 'O preco atual esta mais de 10% abaixo da mediana observada.',
+    AcaoPrecoMercado.reduzir => 'O preco atual esta mais de 10% acima da mediana observada.',
+    AcaoPrecoMercado.manter => reduzirBloqueadoPeloPiso ? 'O mercado sugere reduzir, mas o piso minimo de margem impede uma reducao segura; mantenha o preco atual.' : 'O preco atual esta dentro de uma faixa competitiva de 10% da mediana.',
+    AcaoPrecoMercado.revisarDados => 'Dados insuficientes para recomendar uma alteracao.',
   };
   return AnaliseMercado(
     acao: acao,
@@ -92,6 +69,6 @@ AnaliseMercado analisarMercado({
     maiorPrecoCentavos: validas.last.precoCentavos,
     ofertasUsadas: validas.length,
     confianca: confianca,
-    motivo: custoCentavos != null && mediana < piso ? '$motivo O piso de margem foi aplicado.' : motivo,
+    motivo: custoCentavos != null && mediana < piso && !abaixoDoPiso ? '$motivo O piso de margem foi aplicado.' : motivo,
   );
 }

@@ -24,4 +24,25 @@ void main() {
     final r = analisarMercado(precoAtualCentavos: 1000, ofertas: ofertas.take(1).toList());
     expect(r.acao, AcaoPrecoMercado.revisarDados);
   });
+
+  test('mantém preço quando reduzir quebraria o piso de margem', () {
+    final r = analisarMercado(precoAtualCentavos: 1200, custoCentavos: 1000, ofertas: const [
+      OfertaMercado(precoCentavos: 700, fonte: 'A', url: 'https://a'),
+      OfertaMercado(precoCentavos: 800, fonte: 'B', url: 'https://b'),
+      OfertaMercado(precoCentavos: 900, fonte: 'C', url: 'https://c'),
+    ]);
+    expect(r.acao, AcaoPrecoMercado.manter);
+    expect(r.precoSugeridoCentavos, 1200);
+    expect(r.motivo, contains('piso minimo de margem'));
+  });
+
+  test('aumenta até o piso quando o preço atual está abaixo dele', () {
+    final r = analisarMercado(precoAtualCentavos: 1000, custoCentavos: 1000, ofertas: const [
+      OfertaMercado(precoCentavos: 700, fonte: 'A', url: 'https://a'),
+      OfertaMercado(precoCentavos: 800, fonte: 'B', url: 'https://b'),
+      OfertaMercado(precoCentavos: 900, fonte: 'C', url: 'https://c'),
+    ]);
+    expect(r.acao, AcaoPrecoMercado.aumentar);
+    expect(r.precoSugeridoCentavos, 1200);
+  });
 }
