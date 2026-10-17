@@ -1,3 +1,8 @@
+# Critérios propostos para testes de IA
+
+Rascunho para adaptação ao contrato do domínio; não é uma suíte executável.
+
+```dart
 // Copiar para packages/cic_domain/test/auditoria_adversarial_test.dart
 // na release-blindada. Executar dentro de packages/cic_domain:
 // dart test test/auditoria_adversarial_test.dart
@@ -184,3 +189,4 @@ void main() {
     // pendência do domínio e testar separadamente a configuração do app.
   });
 }
+```

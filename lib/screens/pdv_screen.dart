@@ -182,6 +182,7 @@ class _PdvScreenState extends State<PdvScreen> {
   }
 
   void _adicionar(Produto p) {
+    if (_finalizando) return;
     if (p.quantidade <= 0) {
       aviso(context, '"${p.nome}" está sem estoque.', erro: true);
       return;
@@ -201,6 +202,7 @@ class _PdvScreenState extends State<PdvScreen> {
   }
 
   void _alterarQtd(ItemCarrinho item, int delta) {
+    if (_finalizando) return;
     final nova = item.quantidade + delta;
     if (nova <= 0) {
       setState(() => _carrinho.remove(item));
@@ -215,6 +217,8 @@ class _PdvScreenState extends State<PdvScreen> {
 
   void _resetarPagamento() {
     _aprovado = false;
+    _pixCopiado = false;
+    _nsu.clear();
     _pixTxid = 'CIC${DateTime.now().millisecondsSinceEpoch % 1000000}';
     if (_forma == _Forma.dinheiro) _recebido.text = (_totalCent / 100).toStringAsFixed(2).replaceAll('.', ',');
   }
@@ -232,6 +236,14 @@ class _PdvScreenState extends State<PdvScreen> {
   // ---------- Finalizar ----------
   Future<void> _finalizar() async {
     if (_carrinho.isEmpty || _finalizando) return;
+    if (_forma == _Forma.pix && !conta.pixConfigurado) {
+      aviso(context, 'Cadastre a chave PIX da loja antes de finalizar.', erro: true);
+      return;
+    }
+    if (_forma == _Forma.pix && !_aprovado) {
+      aviso(context, 'Confira o recebimento no aplicativo do banco e confirme o PIX antes de finalizar.', erro: true);
+      return;
+    }
     if (_forma == _Forma.dinheiro && _recebidoCent < _totalCent) {
       aviso(context, 'O valor recebido (${brl(_recebidoCent / 100)}) é menor que o total (${brl(_totalCent / 100)}).', erro: true);
       return;
@@ -348,7 +360,7 @@ class _PdvScreenState extends State<PdvScreen> {
     final catalogo = _catalogo(c, cats, lista);
     final checkout = KeyedSubtree(key: _checkoutKey, child: _checkout(c));
 
-    return Stack(children: [
+    return AbsorbPointer(absorbing: _finalizando, child: Stack(children: [
       CicPagina(
         controller: _rolagem,
         padding: EdgeInsets.fromLTRB(largura >= 640 ? 24 : 12, 16, largura >= 640 ? 24 : 12, _carrinho.isNotEmpty && !dois ? 96 : 32),
@@ -388,7 +400,7 @@ class _PdvScreenState extends State<PdvScreen> {
             ]),
           ),
         ),
-    ]);
+    ]));
   }
 
   Widget _topo(CicPalette c) {
@@ -683,12 +695,15 @@ class _PdvScreenState extends State<PdvScreen> {
         ),
         const SizedBox(height: 12),
         CicBotao(
-          'Finalizar Venda & Emitir Cupom',
+          'Finalizar venda e gerar comprovante',
           icone: LucideIcons.circleCheck,
           largo: true,
           carregando: _finalizando,
           onPressed: _carrinho.isEmpty ? null : _finalizar,
         ),
+        const SizedBox(height: 8),
+        Text('Comprovante não fiscal. O app não emite NFC-e.',
+            style: TextStyle(color: c.textMuted, fontSize: 11)),
       ]),
     );
   }
@@ -775,7 +790,7 @@ class _PdvScreenState extends State<PdvScreen> {
         Row(children: [
           Icon(LucideIcons.qrCode, size: 13, color: c.emerald),
           const SizedBox(width: 6),
-          Text('QR Code Oficial PIX', style: TextStyle(color: c.emerald, fontSize: 11, fontWeight: FontWeight.w800)),
+          Text('PIX da loja', style: TextStyle(color: c.emerald, fontSize: 11, fontWeight: FontWeight.w800)),
           const Spacer(),
           Flexible(child: Text(conta.pixChave, overflow: TextOverflow.ellipsis, style: fonteMono(context, size: 10, peso: FontWeight.w400, cor: c.gold))),
         ]),
@@ -789,7 +804,7 @@ class _PdvScreenState extends State<PdvScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Cai direto na sua conta${conta.banco.isEmpty ? '' : ' ${conta.banco}'} sem taxas.', style: TextStyle(color: c.textMuted, fontSize: 11.5, height: 1.3)),
+              Text('Pagamento para sua conta${conta.banco.isEmpty ? '' : ' ${conta.banco}'}. Confira o crédito no banco; a confirmação no app é manual.', style: TextStyle(color: c.textMuted, fontSize: 11.5, height: 1.3)),
               const SizedBox(height: 8),
               CicBotao(_pixCopiado ? 'Código copiado!' : 'Copiar PIX Copia e Cola', icone: _pixCopiado ? LucideIcons.check : LucideIcons.copy, secundario: true, compacto: true, largo: true, onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: payload));
@@ -799,6 +814,14 @@ class _PdvScreenState extends State<PdvScreen> {
             ]),
           ),
         ]),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: _aprovado,
+          onChanged: (valor) => setState(() => _aprovado = valor ?? false),
+          title: const Text('Conferi no banco e recebi este PIX', style: TextStyle(fontSize: 12)),
+          subtitle: const Text('Copiar o código ou ver o comprovante do cliente não confirma o recebimento.', style: TextStyle(fontSize: 11)),
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
       ]),
     );
   }
