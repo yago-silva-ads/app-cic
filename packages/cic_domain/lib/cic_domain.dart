@@ -10,6 +10,7 @@ export 'src/ia/consultor_seguro.dart';
 export 'src/ia/erros_ia.dart';
 export 'src/ia/guarda_aterramento.dart';
 export 'src/ia/resposta_consultor.dart';
+export 'src/mercado/mercado.dart';
 export 'src/qualidade.dart';
 export 'src/tempo/fuso_loja.dart';
 export 'src/tempo/periodo.dart';

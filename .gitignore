@@ -32,6 +32,9 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
+/docs/tutorial/ferramentas/work/
+/docs/tutorial/ferramentas/videos/
+__pycache__/
 
 # Symbolication related
 app.*.symbols

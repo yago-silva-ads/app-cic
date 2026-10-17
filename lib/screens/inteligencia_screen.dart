@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/format.dart';
 import '../core/theme.dart';
 import '../data/repository.dart';
+import '../data/models.dart';
+import '../services/analise_mercado.dart';
 import '../services/ia_consultor.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
@@ -52,11 +55,15 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
   Map<String, dynamic>? _ativo;
   String? _erroSalvos;
   bool _copiado = false;
+  bool _feedbackEnviado = false;
+  bool _mercadoCarregando = false;
+  RelatorioMercado? _mercado;
 
   static const _sugestoes = [
     'O que tenho no meu estoque agora?',
     'Quanto faturei nos últimos 30 dias?',
     'Qual o produto mais vendido?',
+    'Qual produto devo revisar de preÃ§o?',
     'Quais produtos estão acabando?',
     'Quais produtos vencem em breve?',
     'Como atingir o ponto de equilíbrio?',
@@ -69,6 +76,7 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
   void initState() {
     super.initState();
     _carregarSalvos();
+    _verificarFeedback();
   }
 
   @override
@@ -95,6 +103,84 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
   void _descer() => WidgetsBinding.instance.addPostFrameCallback((_) {
     if (_rolagem.hasClients) _rolagem.animateTo(_rolagem.position.maxScrollExtent, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   });
+
+  Future<void> _verificarFeedback() async {
+    try {
+      final enviado = await e.repo.enviouFeedbackNestaSemana();
+      if (mounted) setState(() => _feedbackEnviado = enviado);
+    } catch (_) {
+      // O cartão continua disponível se a migration ainda não foi aplicada.
+    }
+  }
+
+  Future<void> _abrirFeedback() async {
+    var nota = 0;
+    var recomendaria = false;
+    var aspectos = <String>{};
+    var interesse = 'nao_agora';
+    final comentario = TextEditingController();
+    final salvo = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+        title: const Text('Feedback semanal do teste de campo'),
+        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+          const Text('Como foi usar o app nesta semana?'),
+          const SizedBox(height: 8),
+          Wrap(spacing: 6, children: [for (var i = 1; i <= 5; i++) ChoiceChip(label: Text('$i'), selected: nota == i, onSelected: (_) => setDialog(() => nota = i))]),
+          const SizedBox(height: 14),
+          const Text('O que mais ajudou?'),
+          for (final item in const ['Estoque', 'PDV e vendas', 'Alertas', 'Auditoria e IA', 'Preço de mercado'])
+            CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, title: Text(item), value: aspectos.contains(item), onChanged: (v) => setDialog(() => v == true ? aspectos.add(item) : aspectos.remove(item))),
+          TextField(controller: comentario, maxLines: 3, maxLength: 4000, decoration: const InputDecoration(labelText: 'O que devemos melhorar?', hintText: 'Escreva livremente')),
+          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Você recomendaria o app?'), value: recomendaria, onChanged: (v) => setDialog(() => recomendaria = v)),
+          const SizedBox(height: 4),
+          const Text('Quer conhecer automações de site separadamente?'),
+          DropdownButton<String>(value: interesse, isExpanded: true, items: const [DropdownMenuItem(value: 'nao_agora', child: Text('Não agora')), DropdownMenuItem(value: 'quero_conhecer', child: Text('Quero conhecer')), DropdownMenuItem(value: 'quero_orcamento', child: Text('Quero orçamento'))], onChanged: (v) => setDialog(() => interesse = v ?? interesse)),
+        ])),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')), FilledButton(onPressed: nota == 0 ? null : () => Navigator.pop(ctx, true), child: const Text('Enviar feedback'))],
+      )),
+    );
+    if (salvo != true) { comentario.dispose(); return; }
+    try {
+      await e.repo.salvarFeedbackCampo(nota: nota, aspectos: aspectos.toList(), comentario: comentario.text, recomendaria: recomendaria, interesseSite: interesse);
+      if (mounted) { setState(() => _feedbackEnviado = true); aviso(context, 'Obrigado. Seu feedback ajuda a decidir as próximas melhorias.'); }
+    } on ErroCic catch (er) {
+      if (mounted) aviso(context, er.mensagem, erro: true);
+    } finally { comentario.dispose(); }
+  }
+
+  Future<void> _escolherProdutoMercado() async {
+    Produto? selecionado = e.estoque.first;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
+        title: const Text('Escolha o produto'),
+        content: DropdownButton<Produto>(value: selecionado, isExpanded: true, items: [for (final p in e.estoque) DropdownMenuItem(value: p, child: Text(p.nome, overflow: TextOverflow.ellipsis))], onChanged: (p) => setDialog(() => selecionado = p)),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Consultar mercado'))],
+      )),
+    );
+    if (ok != true || selecionado == null) return;
+    setState(() => _mercadoCarregando = true);
+    try {
+      final r = await AnaliseMercadoService().analisar(selecionado!);
+      if (mounted) setState(() => _mercado = r);
+    } catch (err) {
+      // StateError traz texto pronto para o lojista; o resto vira mensagem simples, sem detalhe técnico.
+      final msg = err is StateError ? err.message : 'Não foi possível consultar o mercado agora. Tente novamente mais tarde.';
+      if (mounted) aviso(context, msg, erro: true);
+    } finally { if (mounted) setState(() => _mercadoCarregando = false); }
+  }
+
+  Future<void> _abrirFonteMercado(String valor) async {
+    final uri = Uri.tryParse(valor);
+    if (uri == null || uri.scheme != 'https') {
+      if (mounted) aviso(context, 'Fonte descartada: o link precisa usar HTTPS.', erro: true);
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      aviso(context, 'Não foi possível abrir a fonte.', erro: true);
+    }
+  }
 
   Future<void> _enviar([String? texto]) async {
     final t = (texto ?? _entrada.text).trim();
@@ -178,6 +264,10 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             _banner(c),
+            const SizedBox(height: 16),
+            _campo(c),
+            const SizedBox(height: 16),
+            _mercadoCard(c),
             if (_verHistorico && _salvos.isNotEmpty) ...[const SizedBox(height: 16), _historico(c)],
             if (_erroSalvos != null) ...[const SizedBox(height: 16), CicErroBanner(mensagem: _erroSalvos!, onTentar: _carregarSalvos)],
             if (_ativo != null) ...[const SizedBox(height: 16), _relatorio(c, _ativo!)],
@@ -221,6 +311,66 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
       ]),
     ]),
   );
+
+  Widget _campo(CicPalette c) => CicCard(
+    padding: const EdgeInsets.all(18),
+    gradiente: LinearGradient(colors: c.isLight ? const [Color(0xFFEFF6FF), Colors.white] : const [Color(0xFF111827), Color(0xFF141414)]),
+    borda: c.isLight ? const Color(0xFFBFDBFE) : const Color(0xFF1D4ED8).withValues(alpha: 0.35),
+    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      CicIconeCaixa(LucideIcons.sparkles, tom: BadgeTom.ouro, tamanho: 42),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 8, runSpacing: 5, children: [
+          Text('Teste de campo gratuito', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
+          const CicBadge('Pesquisa com lojistas', tom: BadgeTom.verde),
+        ]),
+        const SizedBox(height: 5),
+        Text('Use o app no seu negócio sem custo durante a pesquisa. Toda semana você pode contar o que funcionou, marcar melhorias e pedir um contato sobre site e automações separadamente.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.4)),
+        const SizedBox(height: 10),
+        CicBotao(_feedbackEnviado ? 'Feedback desta semana enviado' : 'Responder feedback semanal', icone: _feedbackEnviado ? LucideIcons.check : LucideIcons.fileText, secundario: true, compacto: true, onPressed: _feedbackEnviado ? null : _abrirFeedback),
+      ])),
+    ]),
+  );
+
+  Widget _mercadoCard(CicPalette c) => CicCard(
+    padding: const EdgeInsets.all(18),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        CicIconeCaixa(LucideIcons.chartPie, tom: BadgeTom.ouro, tamanho: 42),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Análise de mercado e preço', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
+          Text('Busca ofertas públicas e sugere aumentar, reduzir ou manter o preço, sempre respeitando o custo informado.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.35)),
+        ])),
+        CicBotao(_mercadoCarregando ? 'Consultando...' : 'Analisar um produto', icone: LucideIcons.search, compacto: true, carregando: _mercadoCarregando, onPressed: _mercadoCarregando || e.estoque.isEmpty ? null : _escolherProdutoMercado),
+      ]),
+      if (_mercado != null) ...[const SizedBox(height: 14), _resultadoMercado(c, _mercado!)],
+    ]),
+  );
+
+  Widget _resultadoMercado(CicPalette c, RelatorioMercado r) {
+    final a = r.analise;
+    final cor = switch (a.acao) { dom.AcaoPrecoMercado.aumentar => c.emerald, dom.AcaoPrecoMercado.reduzir => c.red, dom.AcaoPrecoMercado.manter => c.gold, dom.AcaoPrecoMercado.revisarDados => c.amber };
+    final acao = switch (a.acao) { dom.AcaoPrecoMercado.aumentar => 'AUMENTAR', dom.AcaoPrecoMercado.reduzir => 'REDUZIR', dom.AcaoPrecoMercado.manter => 'MANTER', dom.AcaoPrecoMercado.revisarDados => 'REVISAR DADOS' };
+    return CicSub(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [Expanded(child: Text(r.produto.nome, style: TextStyle(color: c.text, fontWeight: FontWeight.w800))), CicBadge(acao, tom: a.acao == dom.AcaoPrecoMercado.revisarDados ? BadgeTom.ambar : (a.acao == dom.AcaoPrecoMercado.reduzir ? BadgeTom.vermelho : BadgeTom.verde))]),
+      const SizedBox(height: 8),
+      Text(a.motivo, style: TextStyle(color: c.textSoft, fontSize: 12)),
+      const SizedBox(height: 10),
+      Wrap(spacing: 18, runSpacing: 8, children: [
+        _mini(c, 'Preço atual', brl(a.precoAtualCentavos / 100), c.text),
+        _mini(c, 'Preço sugerido', brl(a.precoSugeridoCentavos / 100), cor),
+        _mini(c, 'Mediana online', a.medianaMercadoCentavos == null ? '—' : brl(a.medianaMercadoCentavos! / 100), c.textSoft),
+        _mini(c, 'Ofertas', '${a.ofertasUsadas}', c.textSoft),
+      ]),
+      if (r.aviso != null) ...[const SizedBox(height: 8), Text(r.aviso!, style: TextStyle(color: c.amber, fontSize: 11))],
+      if (r.fontes.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('Fontes consultadas', style: TextStyle(color: c.textMuted, fontSize: 10)),
+        Wrap(spacing: 6, children: [for (final fonte in r.fontes) TextButton(onPressed: () => _abrirFonteMercado(fonte.url), child: Text(fonte.fonte, style: TextStyle(color: c.gold, fontSize: 11))) ]),
+      ],
+    ]));
+  }
 
   Widget _historico(CicPalette c) => CicCard(
     padding: const EdgeInsets.all(16),

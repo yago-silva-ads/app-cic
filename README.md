@@ -1,4 +1,10 @@
-# APP-CIC
+# APP-CIC — teste de campo para decisões de varejo
+
+O APP-CIC é oferecido gratuitamente a lojistas participantes de um teste de campo. Ele organiza estoque e vendas, audita margens e compara preços públicos para sugerir aumentar, reduzir ou manter o valor de uma mercadoria.
+
+O lojista responde um formulário semanal curto dentro do app, com checkboxes e espaço para escrever. Sites, páginas de venda e automações de mensagens são serviços separados do LeadForge e só são apresentados quando houver interesse.
+
+Consulte o [estudo de caso](docs/estudo_caso_teste_campo.md) e a [auditoria do produto](docs/auditoria_produto_leadforge.md).
 
 O APP-CIC ajuda pequenos lojistas a vender, controlar o estoque e entender os números do negócio em um só aplicativo. Funciona na web e no Android, com leitura de códigos de barras, frente de caixa e um assistente orientado pelos dados calculados da loja.
 
@@ -7,7 +13,7 @@ O APP-CIC ajuda pequenos lojistas a vender, controlar o estoque e entender os n�
 ## Funcionalidades e vantagens
 
 - **PDV:** carrinho, registro da forma de pagamento, abertura e fechamento de caixa. A venda registra histórico e baixa o estoque na mesma transação, reduzindo divergências de saldo.
-- **Leitor de código de barras GS1:** leitura pela câmera e identificação pelo código para agilizar cadastro e busca. Reconhecer o código não garante a disponibilidade de todos os dados comerciais do produto.
+- **Leitor de códigos:** leitura pela câmera e identificação pelo código para agilizar cadastro e busca. Reconhecer o código não garante a disponibilidade de todos os dados comerciais do produto.
 - **Estoque com validade:** saldo atual, lote, custo, preço, estoque mínimo, categoria e movimentações. Também há importação por XML de NF-e.
 - **Curva ABC:** classificação calculada para identificar produtos de maior participação nas vendas e priorizar a atenção. O modo projetado é separado do realizado.
 - **Assistente com IA e proteção contra números inventados:** perguntas objetivas usam cálculos locais. Análises abertas passam por uma trava de aterramento; inconsistências detectadas são descartadas e substituídas por dados calculados com aviso. A proteção reduz alucinações, mas não garante toda afirmação em linguagem natural.
@@ -178,7 +184,7 @@ Capturas da loja de demonstração em `docs/prints/`.
 
 ### Leitor
 
-![Leitor de código de barras GS1](docs/prints/leitor.png)
+![Leitor de códigos](docs/prints/leitor.png)
 
 ### Estoque
 

@@ -6,10 +6,11 @@ import '../core/gs1.dart';
 import '../core/theme.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/analise_mercado.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
 
-/// Leitor GS1 & cadastro (porte de `LeitorScreen.tsx`).
+/// Leitor de códigos e cadastro.
 ///
 /// Diferenças deliberadas em relação ao protótipo:
 ///  * Não inventa custo, lote nem validade: só preenche o que a base de
@@ -49,6 +50,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
   bool _buscando = false;
   bool _salvando = false;
   bool _substituir = false;
+  bool _precoMercadoAplicado = false;
   Produto? _existente;
   ({String tipo, String texto})? _msg;
   final List<({String codigo, int qtd})> _insumos = [];
@@ -81,11 +83,23 @@ class _LeitorScreenState extends State<LeitorScreen> {
   void _recalcularVenda() {
     final cu = lerDecimal(_custo.text) ?? 0;
     final mk = lerDecimal(_markup.text) ?? 0;
-    if (cu > 0 && mk > 0) _venda.text = _fmt((cu * mk * 100).round() / 100);
+    if (cu > 0 && mk > 0 && !_precoMercadoAplicado) _venda.text = _fmt((cu * mk * 100).round() / 100);
     setState(() {});
   }
 
+  void _custoMudou() {
+    if (_precoMercadoAplicado) {
+      final cu = lerDecimal(_custo.text) ?? 0;
+      final v = lerDecimal(_venda.text) ?? 0;
+      if (cu > 0 && v > 0) _markup.text = _fmt(v / cu);
+      setState(() {});
+      return;
+    }
+    _recalcularVenda();
+  }
+
   void _vendaMudou() {
+    _precoMercadoAplicado = false;
     final cu = lerDecimal(_custo.text) ?? 0;
     final v = lerDecimal(_venda.text) ?? 0;
     if (cu > 0 && v > 0) _markup.text = _fmt(v / cu);
@@ -121,6 +135,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
         _venda.text = _fmt(existente.valorVenda);
         _origem = existente.origem == 'Fabricado' ? 'Fabricado' : 'Revendido';
         _validade = existente.dataValidade;
+        _precoMercadoAplicado = false;
         _substituir = false;
         _msg = (tipo: 'info', texto: 'Produto já cadastrado: saldo atual de ${existente.quantidade} un. Informe a quantidade que está ENTRANDO para somar ao saldo.');
       });
@@ -147,6 +162,22 @@ class _LeitorScreenState extends State<LeitorScreen> {
         _msg = (tipo: 'info', texto: 'Atenção: o dígito verificador do código $cod não confere com o padrão GS1. Confira se digitou certo.');
       }
     });
+    if (r.encontrado && (r.nome ?? '').isNotEmpty) {
+      try {
+        final consulta = await AnaliseMercadoService().buscarOfertas(nome: r.nome!, codigo: cod);
+        final precos = consulta.ofertas.map((o) => o.precoCentavos).where((v) => v > 0).toList()..sort();
+        if (precos.length >= 2 && mounted) {
+          final mediana = precos.length.isOdd ? precos[precos.length ~/ 2] : (precos[precos.length ~/ 2 - 1] + precos[precos.length ~/ 2]) ~/ 2;
+          setState(() {
+            _venda.text = _fmt(mediana / 100);
+            _precoMercadoAplicado = true;
+            _msg = (tipo: 'sucesso', texto: 'Produto identificado. Preço sugerido pela mediana de ${precos.length} ofertas públicas: ${brl(mediana / 100)}. Confira custo, margem e validade do lote antes de salvar.');
+          });
+        }
+      } catch (_) {
+        // O cadastro segue funcionando mesmo quando a pesquisa externa falha.
+      }
+    }
   }
 
   Future<void> _abrirCamera() => widget.onAbrirScanner((c) {
@@ -164,6 +195,7 @@ class _LeitorScreenState extends State<LeitorScreen> {
       _validade = null;
       _origem = 'Revendido';
       _existente = null;
+      _precoMercadoAplicado = false;
       _substituir = false;
       _insumos.clear();
       _msg = null;
@@ -481,8 +513,8 @@ class _LeitorScreenState extends State<LeitorScreen> {
         const SizedBox(height: 14),
         LayoutBuilder(builder: (context, b) {
           final campos = [
-            CicCampo(rotulo: 'Custo unitário (R\$) *', controller: _custo, teclado: const TextInputType.numberWithOptions(decimal: true), dica: '0,00', onChanged: (_) => _recalcularVenda()),
-            CicCampo(rotulo: 'Markup (multiplicador)', controller: _markup, teclado: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => _recalcularVenda()),
+            CicCampo(rotulo: 'Custo unitário (R\$) *', controller: _custo, teclado: const TextInputType.numberWithOptions(decimal: true), dica: '0,00', onChanged: (_) => _custoMudou()),
+            CicCampo(rotulo: 'Markup (multiplicador)', controller: _markup, teclado: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) { _precoMercadoAplicado = false; _recalcularVenda(); }),
             CicCampo(rotulo: 'Preço de venda (R\$)', controller: _venda, teclado: const TextInputType.numberWithOptions(decimal: true), dica: '0,00', onChanged: (_) => _vendaMudou()),
           ];
           if (b.maxWidth < 560) return Column(children: [for (final f in campos) Padding(padding: const EdgeInsets.only(bottom: 12), child: f)]);

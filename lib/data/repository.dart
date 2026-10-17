@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'conta.dart';
 import 'models.dart';
+import '../core/semana_campo.dart';
 
 /// Erro de negócio com mensagem pronta para o usuário.
 class ErroCic implements Exception {
@@ -264,19 +265,83 @@ class CicRepository {
     await _db.from('relatorios_ia').delete().eq('id', id).eq('empresa_id', uid);
   }, contexto: 'excluir o relatório');
 
+  Future<Map<String, dynamic>> registrarLogisticaReversa({
+    required String codigo,
+    required int quantidade,
+    required String motivo,
+    required String destino,
+    String? documento,
+    String? observacao,
+  }) => _guard(() async {
+    final r = await _db.rpc('registrar_logistica_reversa', params: {
+      'p_codigo': codigo,
+      'p_quantidade': quantidade,
+      'p_motivo': motivo,
+      'p_destino': destino,
+      'p_documento': documento,
+      'p_observacao': observacao,
+    });
+    return Map<String, dynamic>.from(r as Map);
+  }, contexto: 'registrar a logística reversa');
+
+  // ===================== TESTE DE CAMPO =====================
+
+  Future<void> salvarFeedbackCampo({
+    required int nota,
+    required List<String> aspectos,
+    required String comentario,
+    required bool recomendaria,
+    String interesseSite = 'nao_agora',
+  }) => _guard(() async {
+    await _db.from('feedback_campo').insert({
+      'semana_inicio': _inicioSemana().toIso8601String().split('T').first,
+      'nota': nota.clamp(1, 5),
+      'aspectos': aspectos,
+      'comentario': comentario.trim(),
+      'recomendaria': recomendaria,
+      'interesse_site': interesseSite,
+    });
+  }, contexto: 'enviar o feedback');
+
+  Future<bool> enviouFeedbackNestaSemana() => _guard(() async {
+    final r = await _db.from('feedback_campo').select('id')
+        .eq('empresa_id', uid)
+        .eq('semana_inicio', _inicioSemana().toIso8601String().split('T').first)
+        .limit(1);
+    return r.isNotEmpty;
+  }, contexto: 'verificar o feedback semanal');
+
+  DateTime _inicioSemana() {
+    return inicioSemanaCampo(DateTime.now());
+  }
+
   // ===================== CONTA DO ESTABELECIMENTO =====================
 
+  // Documento, telefone, e-mail, Pix e dados bancários ficam cifrados no banco
+  // (supabase/criptografia_conta.sql); as RPCs decifram só para a própria loja.
+  // Enquanto a migration não estiver aplicada (PGRST202), usa a tabela direto.
   Future<Map<String, dynamic>> conta() => _guard(() async {
-    final r = await _db.from('contas_estabelecimento').select('dados').eq('empresa_id', uid).maybeSingle();
-    return Map<String, dynamic>.from((r?['dados'] as Map?) ?? const {});
+    try {
+      final r = await _db.rpc('minha_conta');
+      return Map<String, dynamic>.from((r as Map?) ?? const {});
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      final r = await _db.from('contas_estabelecimento').select('dados').eq('empresa_id', uid).maybeSingle();
+      return Map<String, dynamic>.from((r?['dados'] as Map?) ?? const {});
+    }
   }, contexto: 'carregar a conta');
 
   Future<void> salvarConta(Map<String, dynamic> dados) => _guard(() async {
-    await _db.from('contas_estabelecimento').upsert({
-      'empresa_id': uid,
-      'dados': dados,
-      'atualizado_em': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'empresa_id');
+    try {
+      await _db.rpc('salvar_minha_conta', params: {'p_dados': dados});
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      await _db.from('contas_estabelecimento').upsert({
+        'empresa_id': uid,
+        'dados': dados,
+        'atualizado_em': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'empresa_id');
+    }
   }, contexto: 'salvar a conta');
 
   // ===================== CAIXA (turno) =====================

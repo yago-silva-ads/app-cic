@@ -11,6 +11,7 @@ import '../screens/dashboard_screen.dart';
 import '../screens/estoque_screen.dart';
 import '../screens/inteligencia_screen.dart';
 import '../screens/leitor_screen.dart';
+import '../screens/logistica_reversa_screen.dart';
 import '../screens/movimentacoes_screen.dart';
 import '../screens/pdv_screen.dart';
 import '../screens/scanner_modal.dart';
@@ -21,15 +22,16 @@ import '../ui/widgets.dart';
 
 enum NavTab {
   dashboard('Visão Geral', 'Dashboard Executivo & Inteligência', LucideIcons.layoutDashboard),
-  leitor('Leitor GS1 & Cadastro', 'Leitor de Código de Barras GS1 & Cadastro', LucideIcons.barcode),
+  leitor('Leitor de códigos', 'Leitor de códigos e cadastro', LucideIcons.barcode),
   xml('Importador XML (NF-e)', 'Importador de XML (NF-e / NFC-e SEFAZ)', LucideIcons.fileSpreadsheet),
   estoque('Estoque Atual', 'Inventário & Controle de Estoque', LucideIcons.boxes),
   movimentacoes('Histórico & Movimentações', 'Histórico de Entradas & Saídas', LucideIcons.arrowDownUp),
   inteligencia('Inteligência IA', 'Consultoria Preditiva com IA', LucideIcons.sparkles),
+  logistica('Logística reversa', 'Devoluções, avarias e recall', LucideIcons.refreshCw),
   custos('Custos & Despesas', 'Custos Fixos & Despesas Variáveis', LucideIcons.dollarSign),
   alertas('Central de Alertas', 'Central de Alertas & Notificações', LucideIcons.bell),
   pdv('Frente de Caixa (PDV)', 'Frente de Caixa (PDV Ágil)', LucideIcons.shoppingCart),
-  suporte('Ajuda & Suporte', 'Ajuda, Suporte & Prompt do Sistema', LucideIcons.lifeBuoy);
+  suporte('Ajuda & Suporte', 'Ajuda e Suporte', LucideIcons.lifeBuoy);
 
   const NavTab(this.rotulo, this.titulo, this.icone);
   final String rotulo;
@@ -105,6 +107,8 @@ class _AppShellState extends State<AppShell> {
         return MovimentacoesScreen(estado: e);
       case NavTab.inteligencia:
         return InteligenciaScreen(estado: e);
+      case NavTab.logistica:
+        return LogisticaReversaScreen(estado: e);
       case NavTab.custos:
         return CustosScreen(estado: e);
       case NavTab.alertas:
@@ -531,7 +535,7 @@ class _Header extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(color: c.text, fontSize: sm ? 15 : 12.5, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
                 if (sm)
-                  Text('Padrão GS1 Brasil • Algoritmo Anti-Falência • IA aterrada em dados reais',
+                  Text('Leitor de códigos • Controle de estoque • IA baseada nos seus dados',
                       maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: c.textMuted, fontSize: 11)),
               ],
             ),

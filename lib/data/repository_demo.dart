@@ -23,6 +23,8 @@ class DemoRepository implements CicRepository {
   ];
   final List<Alerta> _alertas = [];
   final List<Map<String, dynamic>> _relatorios = [];
+  final List<Map<String, dynamic>> _feedbacks = [];
+  final List<Map<String, dynamic>> _devolucoes = [];
   Map<String, dynamic> _conta = {};
   SessaoCaixa? _sessao;
   int _seq = 1000;
@@ -268,6 +270,35 @@ class DemoRepository implements CicRepository {
 
   @override
   Future<void> excluirRelatorioIa(int id) async => _relatorios.removeWhere((r) => r['id'] == id);
+
+  @override
+  Future<Map<String, dynamic>> registrarLogisticaReversa({required String codigo, required int quantidade, required String motivo, required String destino, String? documento, String? observacao}) async {
+    if (quantidade <= 0) throw ErroCic('Estoque insuficiente para registrar a saída.');
+    final p = _produto(codigo);
+    if (p.quantidade < quantidade) throw ErroCic('Estoque insuficiente para devolver ${p.nome}. Saldo atual: ${p.quantidade}.', codigo: 'ESTOQUE_INSUFICIENTE');
+    p.quantidade -= quantidade;
+    _devolucoes.insert(0, {'codigo': codigo, 'quantidade': quantidade, 'motivo': motivo, 'destino': destino, 'documento': documento, 'observacao': observacao, 'criado_em': DateTime.now().toUtc().toIso8601String()});
+    _movs.insert(0, Movimentacao(id: _id(), tipo: 'SAIDA', motivo: 'DEVOLUCAO', produtoCodigo: codigo, produtoNome: p.nome, quantidade: quantidade, valorUnitario: p.valorCompra, valorTotal: p.valorCompra * quantidade, dataHora: DateTime.now(), documento: documento, observacao: '$motivo • $destino${observacao == null || observacao.isEmpty ? '' : ' • $observacao'}'));
+    _gerarAlertas();
+    return {'codigo': codigo, 'quantidade': quantidade, 'saldo': p.quantidade};
+  }
+
+  @override
+  Future<void> salvarFeedbackCampo({required int nota, required List<String> aspectos, required String comentario, required bool recomendaria, String interesseSite = 'nao_agora'}) async {
+    _feedbacks.insert(0, {
+      'id': _seq++, 'nota': nota, 'aspectos': aspectos, 'comentario': comentario,
+      'recomendaria': recomendaria, 'interesse_site': interesseSite,
+      'semana_inicio': _inicioSemana().toIso8601String().split('T').first,
+    });
+  }
+
+  @override
+  Future<bool> enviouFeedbackNestaSemana() async => _feedbacks.any((f) => f['semana_inicio'] == _inicioSemana().toIso8601String().split('T').first);
+
+  DateTime _inicioSemana() {
+    final agora = DateTime.now();
+    return DateTime(agora.year, agora.month, agora.day - (agora.weekday - 1));
+  }
 
   @override
   Future<Map<String, dynamic>> conta() async => Map.of(_conta);

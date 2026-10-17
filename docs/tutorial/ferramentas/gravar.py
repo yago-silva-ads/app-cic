@@ -6,6 +6,7 @@ Para cada módulo: narração pt-BR (edge-tts) + legenda (SRT) -> grava a tela c
 Uso: python gravar.py [id_modulo ...]   (sem argumentos grava todos)
 """
 import asyncio
+import argparse
 import json
 import re
 import subprocess
@@ -18,6 +19,7 @@ import imageio_ffmpeg
 from playwright.sync_api import sync_playwright
 
 from montagem import completo, montar
+from progresso import assinatura, carregar, pronto, salvar
 
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = Path(__file__).parent
@@ -79,6 +81,10 @@ def ir(pg, aba):
 
 
 # Cada módulo: título, narração (frases curtas) e o que fazer na tela.
+# Rótulos conferidos no código Flutter; seletores por papel ainda precisam de ensaio no navegador.
+# Na DEMO, Pix começa sem chave: módulo 09 explica a confirmação, sem simular recebimento.
+# Módulo 12 abre a seleção e cancela: não depende de consulta de mercado ou rede.
+# Módulo 13 mostra o formulário sem enviar; módulo 14 explica o checklist oculto na DEMO.
 MODULOS = [
     dict(id="00", titulo="Boas-vindas ao APP-CIC", aba="Visão Geral", narracao=[
         "Olá! Seja bem-vindo ao treinamento do APP-CIC.",
@@ -100,8 +106,8 @@ MODULOS = [
                          pg.mouse.move(640, 300, steps=20), esperar(pg, 5), rolar(pg, 250, 1, 2),
                          clicar(pg, "30 dias", 4), rolar(pg, 300, 1, 2), pg.mouse.move(1100, 400, steps=20), esperar(pg, 4))),
 
-    dict(id="02", titulo="2. Cadastrar produto pelo código de barras", aba="Leitor GS1 & Cadastro", narracao=[
-        "Para cadastrar um produto, abra o Leitor G S 1 e Cadastro.",
+    dict(id="02", titulo="2. Cadastrar produto pelo código de barras", aba="Leitor de códigos", narracao=[
+        "Para cadastrar um produto, abra o Leitor de códigos.",
         "Toque em Abrir câmera e aponte para o código de barras. Se preferir, digite o código e toque em Consultar.",
         "Depois, preencha o nome, o lote, a validade, o preço de custo e o preço de venda.",
         "Se estiver contando o estoque, escolha substituir o saldo.",
@@ -165,21 +171,62 @@ MODULOS = [
     ], acoes=lambda pg: (esperar(pg, 4), pg.mouse.move(700, 300, steps=20), esperar(pg, 5), rolar(pg, 200, 1, 4), esperar(pg, 3))),
 
     dict(id="09", titulo="9. Vender no caixa", aba="Frente de Caixa (PDV)", narracao=[
-        "Na Frente de Caixa você faz as vendas.",
-        "Bipe o código do produto ou toque nele na vitrine para colocar no carrinho.",
-        "Confira os itens e toque em Ir para Pagamento.",
-        "Escolha Pix, cartão ou dinheiro. No dinheiro, o aplicativo calcula o troco.",
-        "Ao finalizar, a venda é registrada e o estoque baixa sozinho.",
-    ], acoes=lambda pg: (esperar(pg, 4), pg.mouse.move(500, 300, steps=20), esperar(pg, 4), rolar(pg, 250, 1, 4), rolar(pg, -250, 1, 4), esperar(pg, 4))),
+        "Na Frente de Caixa, bipe o código ou toque no produto e confira o carrinho.",
+        "Para cobrar por Pix, primeiro cadastre a chave da loja em Conta.",
+        "Copiar o código não confirma o pagamento. Confira o crédito no aplicativo do banco.",
+        "Só então marque: Conferi no banco e recebi este PIX.",
+        "No cartão, confirme a aprovação na máquina. No dinheiro, confira o troco.",
+        "Finalize a venda para baixar o estoque e gerar um comprovante não fiscal. O app não emite cupom fiscal.",
+    ], acoes=lambda pg: (esperar(pg, 4), pg.mouse.move(500, 300, steps=20), esperar(pg, 4),
+                         rolar(pg, 450, 1, 4), rolar(pg, -450, 1, 4), esperar(pg, 4))),
 
-    dict(id="10", titulo="10. Ajuda, tema e letra maior", aba="Ajuda & Suporte", narracao=[
-        "Por fim, a Ajuda e Suporte.",
-        "Toque em Verificar de novo para conferir se tudo está funcionando.",
-        "No menu, você pode trocar para o modo claro e aumentar o tamanho da letra.",
-        "Quando pedir ajuda, diga em qual tela estava e qual mensagem apareceu.",
-        "Pronto! Agora você já conhece o APP-CIC. Bom trabalho e boas vendas!",
-    ], acoes=lambda pg: (esperar(pg, 3), pg.mouse.move(700, 250, steps=20), esperar(pg, 4), rolar(pg, 300, 1, 3),
-                         clicar(pg, "Tema", 3), clicar(pg, "Letra", 3), clicar(pg, "Tema", 2), clicar(pg, "Letra", 2))),
+    dict(id="10", titulo="10. Central do lojista", aba="Ajuda & Suporte", narracao=[
+        "Ajuda e Suporte é a central do lojista.",
+        "Aqui você encontra orientações sobre estoque, vendas, notas e alertas.",
+        "Abra Como começo para rever os primeiros passos.",
+        "Se precisar de atendimento, copie o e-mail e conte em qual tela estava e o que aconteceu.",
+        "No menu, você também pode trocar o tema e aumentar a letra.",
+    ], acoes=lambda pg: (esperar(pg, 3), rolar(pg, 500, 1, 3),
+                         clicar(pg, "Como começo?", 3), clicar(pg, "Copiar e-mail", 3),
+                         clicar(pg, "Tema", 2), clicar(pg, "Letra", 2))),
+
+    dict(id="11", titulo="11. Logística reversa", aba="Logística reversa", narracao=[
+        "Precisa retirar uma mercadoria por avaria, vencimento, recall ou devolução ao fornecedor?",
+        "Em Logística reversa, escolha o produto, o motivo e o destino.",
+        "Informe a quantidade e, se tiver, o documento ou protocolo.",
+        "Confira tudo antes de tocar em Registrar saída reversa.",
+        "A saída reduz o estoque e fica registrada no histórico. Ela não emite uma nota de devolução.",
+    ], acoes=lambda pg: (esperar(pg, 4), rolar(pg, 300, 1, 4), rolar(pg, 250, 1, 4),
+                         esperar(pg, 5))),
+
+    dict(id="12", titulo="12. Pesquisa de mercado", aba="Inteligência IA", narracao=[
+        "Em Análise de mercado e preço, toque em Analisar um produto.",
+        "Escolha o item e use Consultar mercado quando estiver conectado.",
+        "Com ofertas disponíveis, o app sugere aumentar, reduzir ou manter o preço.",
+        "A sugestão respeita o custo e o piso de margem. Com dados insuficientes, pode pedir uma revisão.",
+        "Confira as fontes e decida o preço. A sugestão não muda o cadastro sozinha.",
+    ], acoes=lambda pg: (esperar(pg, 3), clicar(pg, "Analisar um produto", 3),
+                         esperar(pg, 6), clicar(pg, "Cancelar", 2), esperar(pg, 5))),
+
+    dict(id="13", titulo="13. Feedback semanal do teste de campo", aba="Inteligência IA", narracao=[
+        "No teste de campo, conte toda semana como foi usar o app.",
+        "Na sua conta, um aviso no início aparece enquanto a resposta da semana estiver pendente.",
+        "Nesta demonstração, abrimos o formulário pela área de Inteligência IA.",
+        "Dê uma nota, marque o que ajudou e escreva o que precisa melhorar.",
+        "Depois toque em Enviar feedback. São cerca de dois minutos para orientar as próximas melhorias.",
+    ], acoes=lambda pg: (esperar(pg, 3), clicar(pg, "Responder feedback semanal", 3),
+                         rolar(pg, 250, 1, 4), esperar(pg, 5), clicar(pg, "Cancelar", 2))),
+
+    # Checklist e aviso do início são ocultos em DEMO=true: não clicar em controles invisíveis.
+    # Para filmar o checklist em ação, use uma conta de teste nova em build sem DEMO.
+    dict(id="14", titulo="14. Primeiros passos da loja", aba="Visão Geral", narracao=[
+        "Ao entrar com uma loja nova, o início mostra um checklist de preparação.",
+        "Cadastre a chave Pix da loja, cadastre três produtos e faça a primeira venda.",
+        "Toque no passo pendente para abrir a área correspondente.",
+        "As marcas vêm dos dados da loja. Quando os três passos estiverem feitos, o cartão desaparece.",
+        "O checklist não aparece nesta loja de demonstração. Use sua conta para acompanhar o progresso.",
+    ], acoes=lambda pg: (esperar(pg, 5), rolar(pg, 200, 1, 4), esperar(pg, 8))),
+
 ]
 
 
@@ -210,6 +257,8 @@ def gravar(m, pw):
                         record_video_size={"width": W, "height": H})
     t0 = time.time()
     pg = ctx.new_page()
+    pg.set_default_timeout(15000)
+    pg.set_default_navigation_timeout(30000)
     pg.goto(URL)
     pg.wait_for_timeout(5500)
     ligar_semantica(pg)
@@ -222,29 +271,66 @@ def gravar(m, pw):
     inicio = time.time() - t0
     m["acoes"](pg)
     pg.wait_for_timeout(1500)
-    video = pg.video.path()
-    ctx.close()
+    video = pg.video
+    ctx.close()  # O arquivo de vídeo só está concluído depois de fechar o contexto.
+    caminho = video.path()
     b.close()
-    return Path(video), inicio
+    return Path(caminho), inicio
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('modulos', nargs='*', help='IDs dos módulos, como 09 10 11')
+    parser.add_argument('--retomar', action='store_true', help='Reaproveitar etapas concluídas desta versão')
+    args = parser.parse_args()
+    pedidos = set(args.modulos)
+    desconhecidos = pedidos - {m['id'] for m in MODULOS}
+    if desconhecidos:
+        parser.error(f'Módulos desconhecidos: {sorted(desconhecidos)}')
+    app = BASE.parents[2] / 'build' / 'web' / 'main.dart.js'
+    versao = assinatura([Path(__file__), BASE / 'montagem.py', app])
+    escolhidos = [m for m in MODULOS if not pedidos or m['id'] in pedidos]
+    arquivo_progresso = TMP / 'progresso.json'
+    progresso = carregar(arquivo_progresso)
+    for m in escolhidos:
+        capa = BASE.parent / 'arte' / f"capa_{m['id']}.png"
+        if not capa.is_file():
+            parser.error(f'Falta {capa}. Execute ../arte/gerar_arte.py primeiro.')
     fonte = TMP / "segoeuib.ttf"
     if not fonte.exists():
         fonte.write_bytes(Path("C:/Windows/Fonts/segoeuib.ttf").read_bytes())
-    pedidos = set(sys.argv[1:])
-    escolhidos = [m for m in MODULOS if not pedidos or m["id"] in pedidos]
-    feitos = json.loads((TMP / "feitos.json").read_text()) if (TMP / "feitos.json").exists() else {}
+    def versao_modulo(m):
+        return assinatura([BASE.parent / 'arte' / f"capa_{m['id']}.png"]) + versao
+
     for m in escolhidos:  # narração antes: o Playwright síncrono ocupa o event loop
-        asyncio.run(narrar(m))
+        registro = progresso.get(m['id'], {})
+        if args.retomar and pronto(registro, versao_modulo(m), 'audio', 'legenda'):
+            continue
+        asyncio.run(asyncio.wait_for(narrar(m), timeout=180))
+        progresso[m['id']] = {'assinatura': versao_modulo(m),
+                             'audio': str(TMP / f"{m['id']}.mp3"),
+                             'legenda': str(TMP / f"{m['id']}.srt")}
+        salvar(arquivo_progresso, progresso)
     with sync_playwright() as pw:
         for m in escolhidos:
-            video, inicio = gravar(m, pw)
+            registro = progresso[m['id']]
+            if args.retomar and pronto(registro, versao_modulo(m), 'saida'):
+                print(f"mantido {m['id']} {registro['saida']}", flush=True)
+                continue
+            if args.retomar and pronto(registro, versao_modulo(m), 'video'):
+                video, inicio = Path(registro['video']), registro['inicio']
+            else:
+                video, inicio = gravar(m, pw)
+                registro.update(video=str(video), inicio=inicio)
+                salvar(arquivo_progresso, progresso)
             saida = montar(m, video, inicio)
-            feitos[m["id"]] = str(saida)
+            registro['saida'] = str(saida)
+            salvar(arquivo_progresso, progresso)
             print(f"ok {m['id']}  {saida.name}  ({duracao(saida):.0f}s)", flush=True)
-    (TMP / "feitos.json").write_text(json.dumps(feitos, ensure_ascii=False, indent=1))
-    if len(feitos) == len(MODULOS):
+    feitos = {m['id']: progresso[m['id']]['saida'] for m in MODULOS
+              if pronto(progresso.get(m['id'], {}), versao_modulo(m), 'saida')}
+    salvar(TMP / 'feitos.json', feitos)
+    if all(m['id'] in feitos for m in MODULOS):
         c = completo([feitos[m["id"]] for m in MODULOS])
         print(f"ok completo  {c.name}  ({duracao(c) / 60:.1f} min)")
 
