@@ -1,5 +1,7 @@
 # Revisão final de segurança — APP-CIC `release-blindada`
 
+> Estado posterior: já foram corrigidos o acesso anônimo à IA, o tratamento de nomes no prompt, a CSP/ZXing local, `DEMO=false` e a mensagem genérica de login; o limite persistente está no código, mas seu SQL e a restrição das funções legadas ainda dependem de aplicação no banco.
+
 Fonte lida: `C:/Users/Cliente/.claude/jobs/4a289377/tmp/app-cic`, commit `dc78a6a` (15/10/2026). Revisão estática do código, com consulta às documentações oficiais; sem acesso ao catálogo do banco nem ao deploy da Vercel. Os patches abaixo são propostas; **nenhum foi aplicado**. A RLS `RESTRICTIVE` em dez tabelas e o teste de intruso com zero linhas foram informados pelo responsável e considerados como contexto, não revalidados aqui.
 
 ## Prioridade 1 — chamada pública da IA consome cota paga ou gratuita

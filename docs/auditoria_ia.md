@@ -1,5 +1,7 @@
 # Auditoria adversarial do assistente APP-CIC
 
+> Estado posterior: já foram corrigidos o aterramento por produto/classe, a rejeição de sinais, unidades e datas inválidas, a validação de tipos/métricas e o fallback do domínio; este relatório preserva os achados e diffs históricos, não descreve integralmente a release atual.
+
 Inspeção offline de `release-blindada`, HEAD observado `44cfbef6f19325caa43638bcf359ed3bc6a5c182`, em 15/10/2026. Referências abaixo são caminhos e linhas dessa cópia, não do branch antigo de documentação. Nenhum arquivo da cópia do Claude foi modificado. Não foram feitas chamadas a provedores. Dart/Flutter não estavam no PATH; os testes propostos não foram executados.
 
 ## Resultado e critérios
