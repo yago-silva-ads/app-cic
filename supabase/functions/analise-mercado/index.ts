@@ -1,5 +1,7 @@
 // Pesquisa de preços para o teste de campo. A chave do buscador fica somente
 // nos secrets do Supabase; o app recebe apenas ofertas normalizadas e fontes.
+import { preco } from './preco.ts';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -7,13 +9,6 @@ const CORS = {
 };
 const env = (k: string) => Deno.env.get(k)?.trim() || undefined;
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
-
-function preco(texto: string): number | null {
-  const m = texto.match(/R\$\s?([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:[.,][0-9]{2}))/i);
-  if (!m) return null;
-  const n = Number(m[1].replace(/\./g, '').replace(',', '.'));
-  return Number.isFinite(n) && n > 0 && n < 100000 ? n : null;
-}
 
 async function usuarioValido(req: Request): Promise<boolean> {
   const auth = req.headers.get('Authorization') ?? '';
