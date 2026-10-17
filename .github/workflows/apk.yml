@@ -1,12 +1,12 @@
 name: Testes e APK
 
-# A cada push no branch de release (ou manualmente): analisa, testa e gera o APK Android.
+# A cada push na main ou no branch de release (ou manualmente): gera o APK Android.
 # O APK fica em Releases > "apk-teste" (link fixo de download) e nos artefatos da execução.
 # Sem a chave de assinatura (key.properties) o build usa a chave de testes do Android:
 # serve para instalar e testar; para a Play Store, use a chave oficial (ver tool/build_mobile.sh).
 on:
   push:
-    branches: [release-blindada]
+    branches: [main, release-blindada]
   workflow_dispatch:
 
 permissions:
@@ -69,11 +69,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-teste
-          name: "APP-CIC — APK de teste (${{ github.ref_name }})"
+          name: "APP-CIC para Android (teste de campo)"
           prerelease: true
           make_latest: false
           body: |
             APK gerado automaticamente do branch `${{ github.ref_name }}` (commit ${{ github.sha }}).
-            Para instalar: baixe `app-cic.apk` no celular Android e permita "instalar apps desconhecidos".
+            Para instalar no Android:
+            1. Baixe `app-cic.apk` no celular e abra o arquivo.
+            2. Se o Android pedir, abra Configurações e ative "Permitir desta fonte" para o navegador ou gerenciador de arquivos usado.
+            3. Volte ao arquivo e toque em Instalar. Depois, você pode desativar essa permissão.
             Assinado com a chave de testes (não use para publicar na Play Store).
           files: app-cic.apk

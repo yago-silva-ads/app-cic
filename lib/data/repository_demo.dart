@@ -297,7 +297,7 @@ class DemoRepository implements CicRepository {
 
   DateTime _inicioSemana() {
     final agora = DateTime.now();
-    return DateTime(agora.year, agora.month, agora.day).subtract(Duration(days: agora.weekday - 1));
+    return DateTime(agora.year, agora.month, agora.day - (agora.weekday - 1));
   }
 
   @override
