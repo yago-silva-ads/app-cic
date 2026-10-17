@@ -33,7 +33,7 @@ void main() {
     ]);
     expect(r.acao, AcaoPrecoMercado.manter);
     expect(r.precoSugeridoCentavos, 1200);
-    expect(r.motivo, contains('piso minimo de margem'));
+    expect(r.motivo, contains('piso mínimo de margem'));
   });
 
   test('aumenta até o piso quando o preço atual está abaixo dele', () {
