@@ -6,7 +6,7 @@ Na gravação automática com `DEMO=true`, os dados são exemplos. O aviso de fe
 
 Os rótulos abaixo foram conferidos no código das telas. A localização por papel acessível no Playwright ainda precisa de ensaio no navegador. Não clicar em botões ocultos nem narrar uma operação como concluída quando ela apenas foi explicada.
 
-Nota para quem grava: `gravar.py` foi recuperado do checkout `codex-app-cic-docs-seguranca`, mantendo os helpers originais. Para executar, mantenha ao lado o `montagem.py` do mesmo conjunto de ferramentas e as dependências de gravação já usadas. Esta atualização não executa a gravação nem gera os vídeos.
+Nota para quem grava: `gravar.py` e `montagem.py` foram recuperados do checkout `codex-app-cic-docs-seguranca`. As ferramentas agora incluem pré-checagem e retomada por etapa; veja `ferramentas/README.md`. As capas dos 15 módulos estão disponíveis em `arte/`. A gravação completa exige as dependências, Chromium e o build DEMO servindo localmente.
 
 ## 1. Visão Geral
 

@@ -14,7 +14,9 @@ TITLES = [
     'Dar entrada pela nota fiscal (XML)', 'Estoque atual',
     'Histórico de entradas e saídas',
     'Assistente — pergunte sobre a sua loja', 'Custos e despesas',
-    'Central de alertas', 'Vender no caixa', 'Ajuda, tema e letra maior',
+    'Central de alertas', 'Vender no caixa', 'Central do lojista',
+    'Logística reversa', 'Pesquisa de mercado',
+    'Feedback semanal do teste de campo', 'Primeiros passos da loja',
 ]
 
 
@@ -85,7 +87,7 @@ def cover(index, title):
     end = c.paragraph((430, y), title, 53, 726)
     assert end < 610, (index, end)
     c.footer()
-    c.text((1060, 736), f'{index + 1:02d} / 11', 18, MUTED)
+    c.text((1060, 736), f'{index + 1:02d} / {len(TITLES)}', 18, MUTED)
     c.save(f'capa_{index:02d}.png')
 
 
@@ -144,7 +146,7 @@ def main():
     for i, title in enumerate(TITLES):
         cover(i, title)
     social()
-    print('14 artes PNG geradas em', OUT)
+    print(f'{len(TITLES) + 3} artes PNG geradas em', OUT)
 
 
 if __name__ == '__main__':

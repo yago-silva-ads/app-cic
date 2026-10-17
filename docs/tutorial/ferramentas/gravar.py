@@ -6,6 +6,7 @@ Para cada módulo: narração pt-BR (edge-tts) + legenda (SRT) -> grava a tela c
 Uso: python gravar.py [id_modulo ...]   (sem argumentos grava todos)
 """
 import asyncio
+import argparse
 import json
 import re
 import subprocess
@@ -18,6 +19,7 @@ import imageio_ffmpeg
 from playwright.sync_api import sync_playwright
 
 from montagem import completo, montar
+from progresso import assinatura, carregar, pronto, salvar
 
 sys.stdout.reconfigure(encoding="utf-8")
 BASE = Path(__file__).parent
@@ -255,6 +257,8 @@ def gravar(m, pw):
                         record_video_size={"width": W, "height": H})
     t0 = time.time()
     pg = ctx.new_page()
+    pg.set_default_timeout(15000)
+    pg.set_default_navigation_timeout(30000)
     pg.goto(URL)
     pg.wait_for_timeout(5500)
     ligar_semantica(pg)
@@ -267,29 +271,66 @@ def gravar(m, pw):
     inicio = time.time() - t0
     m["acoes"](pg)
     pg.wait_for_timeout(1500)
-    video = pg.video.path()
-    ctx.close()
+    video = pg.video
+    ctx.close()  # O arquivo de vídeo só está concluído depois de fechar o contexto.
+    caminho = video.path()
     b.close()
-    return Path(video), inicio
+    return Path(caminho), inicio
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('modulos', nargs='*', help='IDs dos módulos, como 09 10 11')
+    parser.add_argument('--retomar', action='store_true', help='Reaproveitar etapas concluídas desta versão')
+    args = parser.parse_args()
+    pedidos = set(args.modulos)
+    desconhecidos = pedidos - {m['id'] for m in MODULOS}
+    if desconhecidos:
+        parser.error(f'Módulos desconhecidos: {sorted(desconhecidos)}')
+    app = BASE.parents[2] / 'build' / 'web' / 'main.dart.js'
+    versao = assinatura([Path(__file__), BASE / 'montagem.py', app])
+    escolhidos = [m for m in MODULOS if not pedidos or m['id'] in pedidos]
+    arquivo_progresso = TMP / 'progresso.json'
+    progresso = carregar(arquivo_progresso)
+    for m in escolhidos:
+        capa = BASE.parent / 'arte' / f"capa_{m['id']}.png"
+        if not capa.is_file():
+            parser.error(f'Falta {capa}. Execute ../arte/gerar_arte.py primeiro.')
     fonte = TMP / "segoeuib.ttf"
     if not fonte.exists():
         fonte.write_bytes(Path("C:/Windows/Fonts/segoeuib.ttf").read_bytes())
-    pedidos = set(sys.argv[1:])
-    escolhidos = [m for m in MODULOS if not pedidos or m["id"] in pedidos]
-    feitos = json.loads((TMP / "feitos.json").read_text()) if (TMP / "feitos.json").exists() else {}
+    def versao_modulo(m):
+        return assinatura([BASE.parent / 'arte' / f"capa_{m['id']}.png"]) + versao
+
     for m in escolhidos:  # narração antes: o Playwright síncrono ocupa o event loop
-        asyncio.run(narrar(m))
+        registro = progresso.get(m['id'], {})
+        if args.retomar and pronto(registro, versao_modulo(m), 'audio', 'legenda'):
+            continue
+        asyncio.run(asyncio.wait_for(narrar(m), timeout=180))
+        progresso[m['id']] = {'assinatura': versao_modulo(m),
+                             'audio': str(TMP / f"{m['id']}.mp3"),
+                             'legenda': str(TMP / f"{m['id']}.srt")}
+        salvar(arquivo_progresso, progresso)
     with sync_playwright() as pw:
         for m in escolhidos:
-            video, inicio = gravar(m, pw)
+            registro = progresso[m['id']]
+            if args.retomar and pronto(registro, versao_modulo(m), 'saida'):
+                print(f"mantido {m['id']} {registro['saida']}", flush=True)
+                continue
+            if args.retomar and pronto(registro, versao_modulo(m), 'video'):
+                video, inicio = Path(registro['video']), registro['inicio']
+            else:
+                video, inicio = gravar(m, pw)
+                registro.update(video=str(video), inicio=inicio)
+                salvar(arquivo_progresso, progresso)
             saida = montar(m, video, inicio)
-            feitos[m["id"]] = str(saida)
+            registro['saida'] = str(saida)
+            salvar(arquivo_progresso, progresso)
             print(f"ok {m['id']}  {saida.name}  ({duracao(saida):.0f}s)", flush=True)
-    (TMP / "feitos.json").write_text(json.dumps(feitos, ensure_ascii=False, indent=1))
-    if len(feitos) == len(MODULOS):
+    feitos = {m['id']: progresso[m['id']]['saida'] for m in MODULOS
+              if pronto(progresso.get(m['id'], {}), versao_modulo(m), 'saida')}
+    salvar(TMP / 'feitos.json', feitos)
+    if all(m['id'] in feitos for m in MODULOS):
         c = completo([feitos[m["id"]] for m in MODULOS])
         print(f"ok completo  {c.name}  ({duracao(c) / 60:.1f} min)")
 
