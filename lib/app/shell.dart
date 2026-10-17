@@ -31,7 +31,7 @@ enum NavTab {
   custos('Custos & Despesas', 'Custos Fixos & Despesas Variáveis', LucideIcons.dollarSign),
   alertas('Central de Alertas', 'Central de Alertas & Notificações', LucideIcons.bell),
   pdv('Frente de Caixa (PDV)', 'Frente de Caixa (PDV Ágil)', LucideIcons.shoppingCart),
-  suporte('Ajuda & Suporte', 'Ajuda, Suporte & Prompt do Sistema', LucideIcons.lifeBuoy);
+  suporte('Ajuda & Suporte', 'Ajuda e Suporte', LucideIcons.lifeBuoy);
 
   const NavTab(this.rotulo, this.titulo, this.icone);
   final String rotulo;
