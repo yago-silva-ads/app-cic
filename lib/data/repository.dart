@@ -317,17 +317,31 @@ class CicRepository {
 
   // ===================== CONTA DO ESTABELECIMENTO =====================
 
+  // Documento, telefone, e-mail, Pix e dados bancários ficam cifrados no banco
+  // (supabase/criptografia_conta.sql); as RPCs decifram só para a própria loja.
+  // Enquanto a migration não estiver aplicada (PGRST202), usa a tabela direto.
   Future<Map<String, dynamic>> conta() => _guard(() async {
-    final r = await _db.from('contas_estabelecimento').select('dados').eq('empresa_id', uid).maybeSingle();
-    return Map<String, dynamic>.from((r?['dados'] as Map?) ?? const {});
+    try {
+      final r = await _db.rpc('minha_conta');
+      return Map<String, dynamic>.from((r as Map?) ?? const {});
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      final r = await _db.from('contas_estabelecimento').select('dados').eq('empresa_id', uid).maybeSingle();
+      return Map<String, dynamic>.from((r?['dados'] as Map?) ?? const {});
+    }
   }, contexto: 'carregar a conta');
 
   Future<void> salvarConta(Map<String, dynamic> dados) => _guard(() async {
-    await _db.from('contas_estabelecimento').upsert({
-      'empresa_id': uid,
-      'dados': dados,
-      'atualizado_em': DateTime.now().toUtc().toIso8601String(),
-    }, onConflict: 'empresa_id');
+    try {
+      await _db.rpc('salvar_minha_conta', params: {'p_dados': dados});
+    } on PostgrestException catch (e) {
+      if (e.code != 'PGRST202') rethrow;
+      await _db.from('contas_estabelecimento').upsert({
+        'empresa_id': uid,
+        'dados': dados,
+        'atualizado_em': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'empresa_id');
+    }
   }, contexto: 'salvar a conta');
 
   // ===================== CAIXA (turno) =====================
