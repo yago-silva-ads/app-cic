@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/format.dart';
 import '../core/theme.dart';
@@ -166,6 +167,17 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
     } catch (err) {
       if (mounted) aviso(context, '$err', erro: true);
     } finally { if (mounted) setState(() => _mercadoCarregando = false); }
+  }
+
+  Future<void> _abrirFonteMercado(String valor) async {
+    final uri = Uri.tryParse(valor);
+    if (uri == null || uri.scheme != 'https') {
+      if (mounted) aviso(context, 'Fonte descartada: o link precisa usar HTTPS.', erro: true);
+      return;
+    }
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      aviso(context, 'Não foi possível abrir a fonte.', erro: true);
+    }
   }
 
   Future<void> _enviar([String? texto]) async {
@@ -350,7 +362,11 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
         _mini(c, 'Ofertas', '${a.ofertasUsadas}', c.textSoft),
       ]),
       if (r.aviso != null) ...[const SizedBox(height: 8), Text(r.aviso!, style: TextStyle(color: c.amber, fontSize: 11))],
-      if (r.fontes.isNotEmpty) ...[const SizedBox(height: 8), Text('Fontes consultadas: ${r.fontes.map((f) => f.fonte).join(', ')}', style: TextStyle(color: c.textMuted, fontSize: 10))],
+      if (r.fontes.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        Text('Fontes consultadas', style: TextStyle(color: c.textMuted, fontSize: 10)),
+        Wrap(spacing: 6, children: [for (final fonte in r.fontes) TextButton(onPressed: () => _abrirFonteMercado(fonte.url), child: Text(fonte.fonte, style: TextStyle(color: c.gold, fontSize: 11))) ]),
+      ],
     ]));
   }
 

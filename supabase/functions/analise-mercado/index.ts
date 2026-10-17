@@ -83,6 +83,7 @@ Deno.serve(async (req) => {
     const p = preco(texto);
     if (p == null) continue;
     const url = String(item.url ?? '');
+    try { if (new URL(url).protocol !== 'https:') continue; } catch { continue; }
     if (!url || ofertas.some((x) => x.url === url)) continue;
     ofertas.push({ preco: p, fonte: String(item.profile?.long_name ?? item.meta_url?.hostname ?? 'Fonte externa').slice(0, 120), url, coletadaEm: new Date().toISOString() });
   }
