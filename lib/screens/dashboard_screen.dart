@@ -5,10 +5,12 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../app/shell.dart';
 import '../core/format.dart';
 import '../core/config.dart';
+import '../core/primeiros_passos.dart';
 import '../core/theme.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
 import 'feedback_campo_card.dart';
+import 'conta_modal.dart';
 
 /// Painel executivo (porte de `DashboardScreen.tsx`). Os totais são calculados
 /// em centavos inteiros e a Curva ABC vem do contrato `abc-v1` (cic_domain).
@@ -37,6 +39,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final c = context.c;
     final e = widget.estado;
     final estoque = e.estoque;
+    final passos = PrimeirosPassos(chavePix: e.conta.pixChave,
+        codigosProdutos: estoque.map((p) => p.codigo), vendas: e.vendas.length);
+    final mostrarPassos = !Config.demo && e.carregouUmaVez && !e.carregando &&
+        !['estoque', 'vendas', 'conta'].any(e.erros.containsKey) && !passos.concluido;
 
     // Totais em centavos (sem erro de ponto flutuante).
     var custoEstoque = 0, retorno = 0, unidades = 0;
@@ -64,6 +70,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return CicPagina(children: [
       if (!Config.demo) FeedbackCampoCard(repo: e.repo),
+      if (mostrarPassos) ...[
+        _primeirosPassos(passos),
+        const SizedBox(height: 20),
+      ],
       if (emRisco) ...[
         _alertaPrejuizo(context, lucro, custosMensais),
         const SizedBox(height: 20),
@@ -123,6 +133,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }),
     ]);
+  }
+
+  Widget _primeirosPassos(PrimeirosPassos passos) {
+    final e = widget.estado;
+    Widget item(String titulo, bool concluido, VoidCallback abrir) => ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(concluido ? Icons.check_circle : Icons.radio_button_unchecked,
+          color: concluido ? context.c.emerald : context.c.textMuted),
+      title: Text(titulo, style: const TextStyle(fontSize: 13)),
+      trailing: concluido ? const Text('Feito') : const Icon(Icons.chevron_right),
+      onTap: concluido ? null : abrir,
+    );
+    return CicCard(child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      const Text('Primeiros passos da sua loja', style: TextStyle(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      const Text('Prepare o caixa para começar a usar o app no dia a dia.'),
+      item('Cadastrar a chave Pix da loja', passos.pix, () => abrirContaModal(context, e)),
+      item('Cadastrar 3 produtos', passos.produtos, () => widget.onNavegar(NavTab.leitor)),
+      item('Fazer a primeira venda', passos.primeiraVenda, () => widget.onNavegar(NavTab.pdv)),
+    ]));
   }
 
   Widget _alertaPrejuizo(BuildContext context, int lucro, int custos) {
