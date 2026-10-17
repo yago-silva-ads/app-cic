@@ -3,12 +3,16 @@
 import { preco } from './preco.ts';
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 const env = (k: string) => Deno.env.get(k)?.trim() || undefined;
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin');
+  const permitidas = (env('ALLOWED_ORIGINS') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return origin && permitidas.includes(origin) ? { ...CORS, 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : CORS;
+}
+const json = (status: number, body: unknown, req: Request) => new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req), 'Content-Type': 'application/json' } });
 
 async function usuarioAutenticado(req: Request): Promise<string | null> {
   const bearer = req.headers.get('authorization') ?? '';
@@ -54,24 +58,24 @@ async function reservarCota(req: Request, uid: string): Promise<number> {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return json(405, { erro: 'method_not_allowed' });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { erro: 'method_not_allowed' }, req);
   const uid = await usuarioAutenticado(req);
-  if (!uid) return json(401, { erro: 'unauthorized' });
+  if (!uid) return json(401, { erro: 'unauthorized' }, req);
   const esperaSegundos = await reservarCota(req, uid);
-  if (esperaSegundos > 0) return json(429, { erro: 'limite', esperaSegundos });
+  if (esperaSegundos > 0) return json(429, { erro: 'limite', esperaSegundos }, req);
   let produto: { nome?: string; codigo?: string; precoAtual?: number; custo?: number };
-  try { produto = (await req.json()).produto ?? {}; } catch { return json(400, { erro: 'json_invalido' }); }
+  try { produto = (await req.json()).produto ?? {}; } catch { return json(400, { erro: 'json_invalido' }, req); }
   const nome = String(produto.nome ?? '').trim().slice(0, 120);
   const codigo = String(produto.codigo ?? '').trim().slice(0, 32);
-  if (!nome) return json(400, { erro: 'produto_sem_nome' });
+  if (!nome) return json(400, { erro: 'produto_sem_nome' }, req);
   const chave = env('BRAVE_SEARCH_API_KEY');
-  if (!chave) return json(200, { ofertas: [], aviso: 'Configure BRAVE_SEARCH_API_KEY nos secrets do Supabase para ativar a busca externa.' });
+  if (!chave) return json(200, { ofertas: [], aviso: 'Configure BRAVE_SEARCH_API_KEY nos secrets do Supabase para ativar a busca externa.' }, req);
   const q = encodeURIComponent(`${nome} ${codigo} preço Brasil comprar`);
   const busca = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${q}&country=br&search_lang=pt-br&count=10`, {
     headers: { Accept: 'application/json', 'X-Subscription-Token': chave },
   });
-  if (!busca.ok) return json(502, { erro: 'busca_indisponivel' });
+  if (!busca.ok) return json(502, { erro: 'busca_indisponivel' }, req);
   const dados = await busca.json();
   const ofertas: Array<{ preco: number; fonte: string; url: string; coletadaEm: string }> = [];
   for (const item of (dados.web?.results ?? [])) {
@@ -82,5 +86,5 @@ Deno.serve(async (req) => {
     if (!url || ofertas.some((x) => x.url === url)) continue;
     ofertas.push({ preco: p, fonte: String(item.profile?.long_name ?? item.meta_url?.hostname ?? 'Fonte externa').slice(0, 120), url, coletadaEm: new Date().toISOString() });
   }
-  return json(200, { ofertas: ofertas.slice(0, 8), consultadoEm: new Date().toISOString(), aviso: ofertas.length < 2 ? 'Encontramos poucas ofertas; valide o produto e o código de barras antes de alterar o preço.' : null });
+  return json(200, { ofertas: ofertas.slice(0, 8), consultadoEm: new Date().toISOString(), aviso: ofertas.length < 2 ? 'Encontramos poucas ofertas; valide o produto e o código de barras antes de alterar o preço.' : null }, req);
 });

@@ -30,10 +30,14 @@ type Provedor = { nome: string; chamar: (sistema: string, usuario: string, sinal
 const env = (k: string) => Deno.env.get(k)?.trim() || undefined;
 
 const CORS = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin');
+  const permitidas = (env('ALLOWED_ORIGINS') ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+  return origin && permitidas.includes(origin) ? { ...CORS, 'Access-Control-Allow-Origin': origin, Vary: 'Origin' } : CORS;
+}
 
 const SISTEMA = `Você é o consultor especialista do APP-CIC: varejo e pequeno comércio no Brasil (mercadinho, padaria,
 loja, farmácia, restaurante). Domina giro de estoque, curva ABC, cobertura de estoque, ruptura, margem, markup,
@@ -104,8 +108,8 @@ export function semCampos(texto: string): string {
     .replace(/\s+(?:e|com|de)([.;])/g, '$1').trim();
 }
 
-function json(status: number, body: unknown, extra: Record<string, string> = {}) {
-  return new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json', ...extra } });
+function json(status: number, body: unknown, extra: Record<string, string> = {}, req?: Request) {
+  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders(req ?? new Request('https://localhost')), 'Content-Type': 'application/json', ...extra } });
 }
 
 class Recusa extends Error {
@@ -317,31 +321,31 @@ function limparPergunta(p: unknown): string {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' });
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(405, { erro: 'Método não permitido' }, {}, req);
 
   const uid = await usuarioAutenticado(req);
-  if (!uid) return json(401, { erro: 'Entre na sua conta para usar o assistente' });
+  if (!uid) return json(401, { erro: 'Entre na sua conta para usar o assistente' }, {}, req);
   const espera = await reservarCota(req, uid);
-  if (espera > 0) return json(429, { erro: 'Muitas perguntas seguidas' }, { 'Retry-After': String(espera) });
+  if (espera > 0) return json(429, { erro: 'Muitas perguntas seguidas' }, { 'Retry-After': String(espera) }, req);
 
   let entrada: Record<string, unknown>;
   try {
     const bruto = await req.text();
-    if (bruto.length > 200_000) return json(413, { erro: 'Contexto grande demais' });
+    if (bruto.length > 200_000) return json(413, { erro: 'Contexto grande demais' }, {}, req);
     entrada = JSON.parse(bruto);
-    if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return json(400, { erro: 'Esperado objeto JSON' });
+    if (!entrada || typeof entrada !== 'object' || Array.isArray(entrada)) return json(400, { erro: 'Esperado objeto JSON' }, {}, req);
   } catch {
-    return json(400, { erro: 'JSON inválido' });
+    return json(400, { erro: 'JSON inválido' }, {}, req);
   }
 
   const pergunta = limparPergunta(entrada.pergunta);
   const snapshotVersion = String(entrada.snapshotVersion ?? '');
   const atualizadoEm = String(entrada.atualizadoEm ?? '');
-  if (!pergunta || !snapshotVersion || !atualizadoEm) return json(400, { erro: 'Campos obrigatórios ausentes' });
+  if (!pergunta || !snapshotVersion || !atualizadoEm) return json(400, { erro: 'Campos obrigatórios ausentes' }, {}, req);
 
   const lista = provedores();
-  if (!lista.length) return json(501, { erro: 'IA não configurada no servidor' });
+  if (!lista.length) return json(501, { erro: 'IA não configurada no servidor' }, {}, req);
 
   const contexto = JSON.stringify({
     periodo: entrada.periodo ?? null,
@@ -390,7 +394,7 @@ Deno.serve(async (req) => {
 
   if (!textoIa) {
     const so429 = tentativas.length > 0 && tentativas.every((t) => /:429(:|$)/.test(t));
-    return json(so429 ? 429 : 503, { erro: 'Nenhuma IA respondeu agora', tentativas });
+    return json(so429 ? 429 : 503, { erro: 'Nenhuma IA respondeu agora', tentativas }, {}, req);
   }
 
   try {
@@ -413,8 +417,8 @@ Deno.serve(async (req) => {
       // Eco do pedido: o app descarta respostas de snapshot diferente.
       snapshotVersion,
       atualizadoEm,
-    });
+    }, {}, req);
   } catch {
-    return json(502, { erro: 'Resposta da IA fora do formato' });
+    return json(502, { erro: 'Resposta da IA fora do formato' }, {}, req);
   }
 });
