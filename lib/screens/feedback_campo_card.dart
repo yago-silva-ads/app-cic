@@ -86,6 +86,7 @@ class _FormularioCampoState extends State<_FormularioCampo> {
   final _aspectos = <String>{};
   int _nota = 0;
   bool _recomendaria = false;
+  String _interesseSite = 'nao_agora';
   bool _enviando = false;
   String? _erro;
 
@@ -100,13 +101,15 @@ class _FormularioCampoState extends State<_FormularioCampo> {
     setState(() { _enviando = true; _erro = null; });
     try {
       await widget.repo.salvarFeedbackCampo(nota: _nota, aspectos: _aspectos.toList(),
-          comentario: _comentario.text, recomendaria: _recomendaria);
+          comentario: _comentario.text, recomendaria: _recomendaria, interesseSite: _interesseSite);
       if (mounted) Navigator.pop(context, true);
     } catch (_) {
-      if (mounted) setState(() {
-        _enviando = false;
-        _erro = 'Não foi possível enviar. Sua resposta foi mantida; tente novamente.';
-      });
+      if (mounted) {
+        setState(() {
+          _enviando = false;
+          _erro = 'Não foi possível enviar. Sua resposta foi mantida; tente novamente.';
+        });
+      }
     }
   }
 
@@ -130,6 +133,13 @@ class _FormularioCampoState extends State<_FormularioCampo> {
               decoration: const InputDecoration(labelText: 'O que devemos melhorar?')),
           SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Você recomendaria o app?'),
               value: _recomendaria, onChanged: (v) => setState(() => _recomendaria = v)),
+          const SizedBox(height: 8),
+          const Text('Quer um site para a sua loja? (serviço à parte, fora do teste)'),
+          DropdownButton<String>(value: _interesseSite, isExpanded: true, items: const [
+            DropdownMenuItem(value: 'nao_agora', child: Text('Não agora')),
+            DropdownMenuItem(value: 'quero_conhecer', child: Text('Quero conhecer')),
+            DropdownMenuItem(value: 'quero_orcamento', child: Text('Quero orçamento')),
+          ], onChanged: (v) => setState(() => _interesseSite = v ?? _interesseSite)),
           if (_erro != null) Text(_erro!),
         ]),
       )),
