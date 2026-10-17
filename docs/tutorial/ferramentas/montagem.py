@@ -8,7 +8,7 @@ import imageio_ffmpeg
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 BASE = Path(__file__).parent
 TMP = BASE / "work"
-ARTE = BASE / "arte"
+ARTE = BASE.parent / "arte"
 SAIDA = BASE / "videos"
 # Mesmos parâmetros em todos os clipes: o concat final copia sem recodificar.
 VIDEO = ["-r", "30", "-c:v", "libx264", "-preset", "medium", "-crf", "21", "-pix_fmt", "yuv420p"]
@@ -25,7 +25,7 @@ def duracao(arq):
 
 
 def _rodar(cmd):
-    r = subprocess.run(cmd, cwd=TMP, capture_output=True, text=True, encoding="utf-8", errors="ignore")
+    r = subprocess.run(cmd, cwd=TMP, capture_output=True, text=True, encoding="utf-8", errors="ignore", timeout=900)
     if r.returncode != 0:
         raise RuntimeError(r.stderr[-1500:])
 

@@ -2,13 +2,19 @@
 
 Este vídeo apresenta o APP-CIC para o dono de um mercadinho. Fale com calma, mostre cada tela e use a loja de demonstração quando estiver treinando pela primeira vez.
 
+Na gravação automática com `DEMO=true`, os dados são exemplos. O aviso de feedback no início e o checklist de loja nova ficam ocultos. O módulo de feedback abre o formulário por **Inteligência IA** e cancela sem enviar. O módulo de primeiros passos é explicativo; para mostrar o cartão funcionando, grave uma tomada complementar com uma conta de teste nova, sem DEMO e sem dados de clientes. A pesquisa de mercado abre a seleção do produto e cancela, sem consultar ofertas pela rede. A demonstração do PDV explica o Pix, mas não simula recebimento bancário.
+
+Os rótulos abaixo foram conferidos no código das telas. A localização por papel acessível no Playwright ainda precisa de ensaio no navegador. Não clicar em botões ocultos nem narrar uma operação como concluída quando ela apenas foi explicada.
+
+Nota para quem grava: `gravar.py` e `montagem.py` foram recuperados do checkout `codex-app-cic-docs-seguranca`. As ferramentas agora incluem pré-checagem e retomada por etapa; veja `ferramentas/README.md`. As capas dos 15 módulos estão disponíveis em `arte/`. A gravação completa exige as dependências, Chromium e o build DEMO servindo localmente.
+
 ## 1. Visão Geral
 
 ### CENA
 
 1. No menu lateral, clique em **Visão Geral**.
 2. Mostre os cartões de estoque, faturamento, custos e resultado projetado.
-3. Na seção **Curva ABC de Estoque (Pareto 80/20)**, clique em **Hoje**, **Últimos 7 dias**, **Mês**, **Todo o período** ou **Projetado**, conforme a comparação que deseja mostrar.
+3. Na seção **Curva ABC de Estoque (Pareto 80/20)**, clique em **Hoje**, **7 dias**, **30 dias**, **Todo o período** ou **Estoque atual (projetado)**, conforme a comparação que deseja mostrar.
 4. Se aparecer o aviso de prejuízo, clique em **Consultar IA**.
 5. No cartão do consultor, clique em **Abrir Diagnóstico com IA**.
 
@@ -34,7 +40,7 @@ Quando aparecer um alerta de risco, abra o diagnóstico para entender a situaç�
 
 ### NARRAÇÃO
 
-O leitor GS1 transforma o código de barras em um cadastro rápido.
+O Leitor de códigos ajuda a cadastrar os produtos pelo código de barras.
 Aponte a câmera para o produto ou digite o código manualmente.
 Informe o lote, a validade, o custo e o preço de venda.
 Se você estiver contando o estoque, escolha substituir o saldo atual.
@@ -171,10 +177,10 @@ Assim, a equipe sempre sabe o que precisa ser resolvido primeiro.
 2. Clique em **Bipar** ou toque em um produto da vitrine.
 3. Confira os itens no **CARRINHO DE VENDA** e clique em **Ir p/ Pagamento**.
 4. Em **Forma de pagamento:** escolha a opção usada pelo cliente.
-5. Para Pix, use **Copiar PIX Copia e Cola** quando essa opção estiver disponível.
+5. Para Pix, cadastre antes a chave da loja em **Conta**, na seção **2. Conta & PIX**. Com itens no carrinho e chave cadastrada, use **Copiar PIX Copia e Cola**. Confira o crédito no aplicativo do banco e marque **Conferi no banco e recebi este PIX**. Copiar o código ou ver o comprovante do cliente não confirma o recebimento.
 6. Para cartão, confirme na maquininha e clique em **Aprovado na máquina**.
 7. Para dinheiro, informe o valor recebido e confira o troco.
-8. Clique em **Finalizar Venda & Emitir Cupom**.
+8. Clique em **Finalizar venda e gerar comprovante**. Mostre o aviso **Comprovante não fiscal. O app não emite NFC-e.**
 9. No comprovante, clique em **Copiar texto do cupom** ou em **Nova Venda (Frente de Caixa)**.
 
 ### NARRAÇÃO
@@ -182,25 +188,98 @@ Assim, a equipe sempre sabe o que precisa ser resolvido primeiro.
 O Frente de Caixa foi feito para uma venda rápida e organizada.
 Bipe o produto ou toque nele na vitrine para colocá-lo no carrinho.
 Confira quantidades e valores antes de ir para o pagamento.
-Escolha a forma recebida e siga a orientação mostrada na tela.
+Para Pix, cadastre a chave da loja, confira o crédito no banco e marque a confirmação de recebimento.
 No dinheiro, confira o troco; no cartão, confirme a aprovação na maquininha.
-Finalize para registrar a venda, baixar o estoque e emitir o cupom.
+Finalize para registrar a venda, baixar o estoque e gerar um comprovante não fiscal.
+O app não emite cupom fiscal e a confirmação do Pix é manual.
 
-## 10. Ajuda & Suporte
+## 10. Central do lojista — Ajuda & Suporte
 
 ### CENA
 
 1. No menu, clique em **Ajuda & Suporte**.
-2. Na área **DIAGNÓSTICO AO VIVO**, clique em **Verificar de novo**.
-3. Aguarde os itens de conexão e funcionamento serem conferidos.
-4. Leia a seção **COMO USAR NO IPHONE** quando precisar orientar alguém da equipe.
-5. Se ainda houver dúvida, anote a mensagem exibida e procure o responsável pelo suporte.
+2. Mostre **O que você pode fazer no app** e as orientações de estoque, vendas, notas e alertas.
+3. Em **Respostas rápidas**, abra **Como começo?**.
+4. Clique em **Copiar e-mail** para guardar o contato. **Enviar e-mail** abre seu aplicativo de e-mail.
+5. Ao pedir ajuda, informe a tela em que estava e o que aconteceu.
 
 ### NARRAÇÃO
 
-A tela Ajuda & Suporte reúne orientações simples para o dia a dia.
-Use Verificar de novo para conferir se os serviços estão respondendo.
-A mensagem de cada item ajuda a localizar o ponto que precisa de atenção.
-Consulte também o passo a passo para usar o aplicativo no iPhone.
-Quando pedir ajuda, informe a tela em que estava e a mensagem que apareceu.
-Com esses detalhes, o atendimento consegue resolver a situação mais rapidamente.
+Ajuda e Suporte é a central do lojista.
+Aqui você encontra orientações rápidas sobre as tarefas da loja.
+Abra Como começo para rever os primeiros passos.
+Se precisar de atendimento, copie o e-mail e conte o que aconteceu.
+No menu, você também pode trocar o tema e aumentar a letra.
+
+## 11. Logística reversa
+
+### CENA
+
+1. No menu, clique em **Logística reversa**.
+2. Confira **PRODUTO**, **MOTIVO** e **DESTINO**. Exemplos de motivo: **Devolução ao fornecedor**, **Produto avariado**, **Produto vencido** e **Recall**.
+3. Informe **Quantidade**, **Documento ou protocolo (opcional)** e **Observação (opcional)**.
+4. Mostre **Registrar saída reversa**. No vídeo automático, apenas apresente o formulário. Para executar, use estoque de teste e confira antes de confirmar.
+5. Após uma saída confirmada, confira o registro em **Histórico & Movimentações**.
+
+### NARRAÇÃO
+
+Precisa retirar uma mercadoria por avaria, vencimento, recall ou devolução ao fornecedor?
+Escolha o produto, o motivo, o destino e a quantidade.
+Se tiver, informe o documento ou protocolo.
+Confira antes de registrar a saída reversa.
+A saída reduz o estoque e fica no histórico. Ela não emite uma nota de devolução.
+
+## 12. Pesquisa de mercado
+
+### CENA
+
+1. Abra **Inteligência IA** e localize **Análise de mercado e preço**.
+2. Clique em **Analisar um produto**. No diálogo **Escolha o produto**, confira o item selecionado.
+3. No vídeo automático, mostre a seleção e clique em **Cancelar**. Para uma tomada com consulta real, clique em **Consultar mercado** com conexão disponível e aguarde.
+4. Havendo resultado, mostre a recomendação de aumentar, reduzir ou manter, o motivo e **Fontes consultadas**. Dados insuficientes podem exigir revisão, em vez de recomendar um novo preço.
+5. Explique o piso de margem; não prometa aumento de lucro ou alteração automática do cadastro.
+
+### NARRAÇÃO
+
+Toque em Analisar um produto e escolha o item.
+Com conexão, use Consultar mercado para buscar ofertas públicas.
+O app pode sugerir aumentar, reduzir ou manter o preço, respeitando o custo e o piso de margem.
+Se faltarem dados, ele pode pedir uma revisão.
+Confira as fontes e decida. A sugestão não muda o cadastro sozinha.
+
+## 13. Feedback semanal do teste de campo
+
+### CENA
+
+1. Na conta real, entre em **Visão Geral**. Se ainda não respondeu à semana atual, o cartão **Seu feedback desta semana** oferece **Responder formulário**. A semana começa na segunda-feira.
+2. Na DEMO, esse aviso fica oculto. Abra **Inteligência IA** e clique em **Responder feedback semanal**, que abre o formulário existente nessa tela.
+3. No diálogo **Feedback semanal do teste de campo**, mostre a nota de 1 a 5, **O que mais ajudou?**, **O que devemos melhorar?** e **Você recomendaria o app?**.
+4. Na gravação automática, clique em **Cancelar**, sem enviar dados de treinamento. Em uso real, escolha uma nota e toque em **Enviar feedback**.
+5. Depois de enviado, o aviso no início desaparece na próxima consulta. Em Inteligência IA, o botão passa a indicar **Feedback desta semana enviado** e fica desabilitado até a próxima semana ser consultada.
+
+### NARRAÇÃO
+
+No teste de campo, conte toda semana como foi usar o app.
+Na sua conta, o início lembra quando a resposta está pendente.
+Nesta demonstração, abrimos o formulário pela Inteligência IA.
+Dê uma nota, marque o que ajudou e escreva o que precisa melhorar.
+São cerca de dois minutos para orientar as próximas melhorias.
+
+## 14. Primeiros passos da loja
+
+### CENA
+
+1. A tomada automática mostra **Visão Geral** com explicação narrada: o checklist fica oculto em `DEMO=true`.
+2. Para a tomada complementar, entre com uma conta de teste nova, sem DEMO, e aguarde o carregamento dos dados. Mostre **Primeiros passos da sua loja**.
+3. Toque em **Cadastrar a chave Pix da loja** para abrir a conta e informar a chave.
+4. Toque em **Cadastrar 3 produtos** para abrir **Leitor de códigos**. São três produtos distintos, não três unidades do mesmo produto.
+5. Toque em **Fazer a primeira venda** para abrir **Frente de Caixa (PDV)**. Use apenas dados de teste na gravação.
+6. Volte à **Visão Geral** para mostrar os itens marcados como **Feito** a partir dos dados salvos. O cartão desaparece quando os três passos estão concluídos.
+
+### NARRAÇÃO
+
+Ao entrar com uma loja nova, o início mostra um checklist de preparação.
+Cadastre a chave Pix, três produtos e faça a primeira venda.
+Toque no passo pendente para abrir a área correspondente.
+As marcas vêm dos dados da loja. Ao concluir os três passos, o cartão desaparece.
+O checklist não aparece nesta loja de demonstração. Use sua conta para acompanhar o progresso.
