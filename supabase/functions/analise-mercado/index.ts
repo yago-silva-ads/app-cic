@@ -10,21 +10,56 @@ const CORS = {
 const env = (k: string) => Deno.env.get(k)?.trim() || undefined;
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
-async function usuarioValido(req: Request): Promise<boolean> {
-  const auth = req.headers.get('Authorization') ?? '';
-  const token = auth.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return false;
+async function usuarioAutenticado(req: Request): Promise<string | null> {
+  const bearer = req.headers.get('authorization') ?? '';
   const url = env('SUPABASE_URL');
-  const key = env('SUPABASE_ANON_KEY') ?? env('SUPABASE_SERVICE_ROLE_KEY');
-  if (!url || !key) return false;
-  const r = await fetch(`${url}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: key } });
-  return r.ok;
+  if (!url || !/^Bearer\s+\S+$/i.test(bearer)) return null;
+  try {
+    const r = await fetch(`${url}/auth/v1/user`, { headers: { authorization: bearer, apikey: env('SUPABASE_ANON_KEY') ?? '' } });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return typeof u?.id === 'string' && u.id ? u.id : null;
+  } catch {
+    return null;
+  }
+}
+
+const janela = new Map<string, number[]>();
+function limitado(uid: string): number {
+  const agora = Date.now();
+  const lista = (janela.get(uid) ?? []).filter((t) => agora - t < 60_000);
+  if (lista.length >= 4) return Math.ceil((60_000 - (agora - lista[0])) / 1000);
+  lista.push(agora);
+  janela.set(uid, lista);
+  return 0;
+}
+
+async function reservarCota(req: Request, uid: string): Promise<number> {
+  const url = env('SUPABASE_URL');
+  const apikey = env('SUPABASE_ANON_KEY');
+  if (!url || !apikey) return limitado(uid);
+  try {
+    const r = await fetch(`${url.replace(/\/$/, '')}/rest/v1/rpc/reservar_cota_ia`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey, authorization: req.headers.get('authorization') ?? '' },
+      body: JSON.stringify({ p_limite: 4 }),
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (!r.ok) return limitado(uid);
+    const espera = await r.json();
+    return Number.isInteger(espera) && espera >= 0 && espera <= 60 ? espera : limitado(uid);
+  } catch {
+    return limitado(uid);
+  }
 }
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return json(405, { erro: 'method_not_allowed' });
-  if (!await usuarioValido(req)) return json(401, { erro: 'unauthorized' });
+  const uid = await usuarioAutenticado(req);
+  if (!uid) return json(401, { erro: 'unauthorized' });
+  const esperaSegundos = await reservarCota(req, uid);
+  if (esperaSegundos > 0) return json(429, { erro: 'limite', esperaSegundos });
   let produto: { nome?: string; codigo?: string; precoAtual?: number; custo?: number };
   try { produto = (await req.json()).produto ?? {}; } catch { return json(400, { erro: 'json_invalido' }); }
   const nome = String(produto.nome ?? '').trim().slice(0, 120);
