@@ -4,9 +4,11 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../app/shell.dart';
 import '../core/format.dart';
+import '../core/config.dart';
 import '../core/theme.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
+import 'feedback_campo_card.dart';
 
 /// Painel executivo (porte de `DashboardScreen.tsx`). Os totais são calculados
 /// em centavos inteiros e a Curva ABC vem do contrato `abc-v1` (cic_domain).
@@ -61,6 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return CicPagina(children: [
+      if (!Config.demo) FeedbackCampoCard(repo: e.repo),
       if (emRisco) ...[
         _alertaPrejuizo(context, lucro, custosMensais),
         const SizedBox(height: 20),

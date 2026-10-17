@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'conta.dart';
 import 'models.dart';
+import '../core/semana_campo.dart';
 
 /// Erro de negócio com mensagem pronta para o usuário.
 class ErroCic implements Exception {
@@ -311,8 +312,7 @@ class CicRepository {
   }, contexto: 'verificar o feedback semanal');
 
   DateTime _inicioSemana() {
-    final agora = DateTime.now();
-    return DateTime(agora.year, agora.month, agora.day).subtract(Duration(days: agora.weekday - 1));
+    return inicioSemanaCampo(DateTime.now());
   }
 
   // ===================== CONTA DO ESTABELECIMENTO =====================
