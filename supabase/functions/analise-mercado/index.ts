@@ -70,6 +70,7 @@ Deno.serve(async (req) => {
   const codigo = String(produto.codigo ?? '').trim().slice(0, 32);
   if (!nome) return json(400, { erro: 'produto_sem_nome' }, req);
   const resultado = await buscarOfertas(nome, codigo, {
+    groqKey: env('GROQ_API_KEY'), groqKey2: env('GROQ_API_KEY_2'),
     geminiKey: env('GEMINI_API_KEY'), geminiModel: env('GEMINI_MODEL'), braveKey: env('BRAVE_SEARCH_API_KEY'),
   });
   return json(resultado.erro ? 502 : 200, resultado, req);

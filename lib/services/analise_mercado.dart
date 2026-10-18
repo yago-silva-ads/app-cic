@@ -24,7 +24,9 @@ class AnaliseMercadoService {
       Uri.parse(Config.marketFunctionUrl),
       headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer $token', 'apikey': Config.supabaseAnonKey},
       body: jsonEncode({'produto': {'nome': nome, 'codigo': codigo, 'precoAtual': 0, 'custo': 0}}),
-    ).timeout(const Duration(seconds: 12));
+    // A busca na web (Groq browser_search) leva de 12 a 40 s; 75 s cobre a pior consulta medida com folga.
+    ).timeout(const Duration(seconds: 75), onTimeout: () =>
+        throw StateError('A pesquisa demorou mais que o normal. Tente de novo em alguns instantes.'));
     if (resposta.statusCode == 404) {
       throw StateError('A pesquisa de mercado ainda está sendo ativada para o teste de campo. Em breve ela aparece aqui.');
     }

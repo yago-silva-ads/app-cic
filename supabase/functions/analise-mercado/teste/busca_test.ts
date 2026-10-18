@@ -85,7 +85,7 @@ Deno.test('Gemini primário: endpoint, header, google_search, produto e modelo p
   let chamadas = 0;
   const resultado = await buscarOfertas('Arroz', '789', { geminiKey: 'segredo-teste', braveKey: 'reserva' }, (url, init) => {
     chamadas++;
-    assert.equal(String(url), 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent');
+    assert.equal(String(url), 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent');
     assert.equal(new Headers(init?.headers).get('x-goog-api-key'), 'segredo-teste');
     const corpo = JSON.parse(String(init?.body));
     assert.deepEqual(corpo.tools, [{ google_search: {} }]);
@@ -111,14 +111,16 @@ for (const caso of ['cota', 'rede', 'json', 'sem_fontes', 'formato']) {
     const chamadas: string[] = [];
     const resultado = await buscarOfertas('Arroz', '789', { geminiKey: 'teste', braveKey: 'reserva' }, (url) => {
       chamadas.push(String(url));
-      if (chamadas.length === 2) return Promise.resolve(brave());
+      if (String(url).includes('api.search.brave.com')) return Promise.resolve(brave());
       if (caso === 'rede') return Promise.reject(new Error('timeout'));
       return Promise.resolve(caso === 'cota' ? new Response('', { status: 429 }) :
         caso === 'json' ? new Response('não JSON') :
         caso === 'formato' ? Response.json({ error: {} }) : Response.json({ candidates: [{ content: fixture.candidates[0].content }] }));
     }, agora);
-    assert.equal(chamadas.length, 2);
-    assert.match(chamadas[1], /api.search.brave.com/);
+    // cada modelo da cadeia do Gemini é tentado antes do Brave (o último)
+    assert.equal(chamadas.length, 5);
+    assert.equal(chamadas.filter((u) => u.includes('generativelanguage')).length, 4);
+    assert.match(chamadas[4], /api.search.brave.com/);
     assert.equal(resultado.ofertas[0].preco, 14.9);
   });
 }
