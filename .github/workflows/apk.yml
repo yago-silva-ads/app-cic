@@ -31,6 +31,8 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Versão validada localmente e compatível com Gradle 8.14 / AGP 8.11.1.
+          flutter-version: '3.47.4'
           cache: true
 
       - name: Dependências
