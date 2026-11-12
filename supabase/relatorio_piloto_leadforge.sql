@@ -30,7 +30,14 @@ FROM auth.users u
 CROSS JOIN semana s
 LEFT JOIN produtos p ON p.empresa_id = u.id
 LEFT JOIN vendas v ON v.empresa_id = u.id
-LEFT JOIN public.feedback_campo f ON f.empresa_id = u.id AND f.semana_inicio = s.inicio
+-- Cada loja aparece uma vez, considerando seu feedback mais recente da semana.
+LEFT JOIN LATERAL (
+  SELECT fc.id, fc.nota, fc.interesse_site
+  FROM public.feedback_campo fc
+  WHERE fc.empresa_id = u.id AND fc.semana_inicio = s.inicio
+  ORDER BY fc.criado_em DESC, fc.id DESC
+  LIMIT 1
+) f ON true
 WHERE u.raw_user_meta_data ->> 'origem' = 'leadforge'
   AND u.raw_user_meta_data ->> 'convite' ~ '^[a-z0-9-]{1,80}$'
 ORDER BY dias_cadastro DESC, slug;
