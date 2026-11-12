@@ -1,0 +1,15 @@
+{
+  "choices": [{"message": {
+    "content": "Não confiar nesta conclusão: R$ 0,01 em https://inventada.example/",
+    "executed_tools": [
+      {"name": "browser_search", "output": {"results": [
+        {"url": "https://hortifruti.example/tomate", "text": "Tomate por R$ 7,90."},
+        {"url": "http://insegura.example/tomate", "text": "R$ 1,00"},
+        {"url": "https://sem-preco.example/tomate", "text": "Consultar"}
+      ]}},
+      {"type": "browser_search", "browser_results": [
+        {"url": "https://mercado.example/tomate", "text": "Tomate R$ 8,50"}
+      ]}
+    ]
+  }}]
+}

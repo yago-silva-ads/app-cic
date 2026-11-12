@@ -287,19 +287,21 @@ class CicRepository {
   // ===================== TESTE DE CAMPO =====================
 
   Future<void> salvarFeedbackCampo({
-    required int nota,
+    int? nota,
     required List<String> aspectos,
     required String comentario,
-    required bool recomendaria,
+    bool? recomendaria,
     String interesseSite = 'nao_agora',
+    Map<String, dynamic>? respostas,
   }) => _guard(() async {
     await _db.from('feedback_campo').insert({
       'semana_inicio': _inicioSemana().toIso8601String().split('T').first,
-      'nota': nota.clamp(1, 5),
+      'nota': nota?.clamp(1, 5),
       'aspectos': aspectos,
       'comentario': comentario.trim(),
       'recomendaria': recomendaria,
       'interesse_site': interesseSite,
+      'respostas': ?respostas,
     });
   }, contexto: 'enviar o feedback');
 

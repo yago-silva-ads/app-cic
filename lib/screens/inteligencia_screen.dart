@@ -13,6 +13,7 @@ import '../services/analise_mercado.dart';
 import '../services/ia_consultor.dart';
 import '../state/app_state.dart';
 import '../ui/widgets.dart';
+import 'feedback_campo_card.dart';
 
 class _Msg {
   _Msg({required this.deUsuario, required this.texto, this.origem, this.aviso, DateTime? quando}) : quando = quando ?? DateTime.now();
@@ -114,39 +115,15 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
   }
 
   Future<void> _abrirFeedback() async {
-    var nota = 0;
-    var recomendaria = false;
-    var aspectos = <String>{};
-    var interesse = 'nao_agora';
-    final comentario = TextEditingController();
     final salvo = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setDialog) => AlertDialog(
-        title: const Text('Feedback semanal do teste de campo'),
-        content: SingleChildScrollView(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-          const Text('Como foi usar o app nesta semana?'),
-          const SizedBox(height: 8),
-          Wrap(spacing: 6, children: [for (var i = 1; i <= 5; i++) ChoiceChip(label: Text('$i'), selected: nota == i, onSelected: (_) => setDialog(() => nota = i))]),
-          const SizedBox(height: 14),
-          const Text('O que mais ajudou?'),
-          for (final item in const ['Estoque', 'PDV e vendas', 'Alertas', 'Auditoria e IA', 'Preço de mercado'])
-            CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, title: Text(item), value: aspectos.contains(item), onChanged: (v) => setDialog(() => v == true ? aspectos.add(item) : aspectos.remove(item))),
-          TextField(controller: comentario, maxLines: 3, maxLength: 4000, decoration: const InputDecoration(labelText: 'O que devemos melhorar?', hintText: 'Escreva livremente')),
-          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Você recomendaria o app?'), value: recomendaria, onChanged: (v) => setDialog(() => recomendaria = v)),
-          const SizedBox(height: 4),
-          const Text('Quer conhecer automações de site separadamente?'),
-          DropdownButton<String>(value: interesse, isExpanded: true, items: const [DropdownMenuItem(value: 'nao_agora', child: Text('Não agora')), DropdownMenuItem(value: 'quero_conhecer', child: Text('Quero conhecer')), DropdownMenuItem(value: 'quero_orcamento', child: Text('Quero orçamento'))], onChanged: (v) => setDialog(() => interesse = v ?? interesse)),
-        ])),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')), FilledButton(onPressed: nota == 0 ? null : () => Navigator.pop(ctx, true), child: const Text('Enviar feedback'))],
-      )),
+      barrierDismissible: false,
+      builder: (_) => FormularioCampo(repo: e.repo),
     );
-    if (salvo != true) { comentario.dispose(); return; }
-    try {
-      await e.repo.salvarFeedbackCampo(nota: nota, aspectos: aspectos.toList(), comentario: comentario.text, recomendaria: recomendaria, interesseSite: interesse);
-      if (mounted) { setState(() => _feedbackEnviado = true); aviso(context, 'Obrigado. Seu feedback ajuda a decidir as próximas melhorias.'); }
-    } on ErroCic catch (er) {
-      if (mounted) aviso(context, er.mensagem, erro: true);
-    } finally { comentario.dispose(); }
+    if (mounted && salvo == true) {
+      setState(() => _feedbackEnviado = true);
+      aviso(context, 'Obrigado. Seu feedback ajuda a decidir as próximas melhorias.');
+    }
   }
 
   Future<void> _escolherProdutoMercado() async {
@@ -325,9 +302,9 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
           const CicBadge('Pesquisa com lojistas', tom: BadgeTom.verde),
         ]),
         const SizedBox(height: 5),
-        Text('Use o app no seu negócio sem custo durante a pesquisa. Toda semana você pode contar o que funcionou, marcar melhorias e pedir um contato sobre site e automações separadamente.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.4)),
+        Text('Use o app no seu negócio sem custo durante a pesquisa. Você pode enviar feedback sempre que quiser para contar o que funcionou e sugerir melhorias.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.4)),
         const SizedBox(height: 10),
-        CicBotao(_feedbackEnviado ? 'Feedback desta semana enviado' : 'Responder feedback semanal', icone: _feedbackEnviado ? LucideIcons.check : LucideIcons.fileText, secundario: true, compacto: true, onPressed: _feedbackEnviado ? null : _abrirFeedback),
+        CicBotao(_feedbackEnviado ? 'Enviar novo feedback' : 'Responder feedback', icone: _feedbackEnviado ? LucideIcons.check : LucideIcons.fileText, secundario: true, compacto: true, onPressed: _abrirFeedback),
       ])),
     ]),
   );
@@ -342,7 +319,7 @@ class _InteligenciaScreenState extends State<InteligenciaScreen> {
           Text('Análise de mercado e preço', style: TextStyle(color: c.text, fontSize: 14, fontWeight: FontWeight.w800)),
           Text('Busca ofertas públicas e sugere aumentar, reduzir ou manter o preço, sempre respeitando o custo informado.', style: TextStyle(color: c.textMuted, fontSize: 12, height: 1.35)),
         ])),
-        CicBotao(_mercadoCarregando ? 'Consultando...' : 'Analisar um produto', icone: LucideIcons.search, compacto: true, carregando: _mercadoCarregando, onPressed: _mercadoCarregando || e.estoque.isEmpty ? null : _escolherProdutoMercado),
+        CicBotao(_mercadoCarregando ? 'Pesquisando lojas (até 1 min)...' : 'Analisar um produto', icone: LucideIcons.search, compacto: true, carregando: _mercadoCarregando, onPressed: _mercadoCarregando || e.estoque.isEmpty ? null : _escolherProdutoMercado),
       ]),
       if (_mercado != null) ...[const SizedBox(height: 14), _resultadoMercado(c, _mercado!)],
     ]),

@@ -1,0 +1,17 @@
+{
+  "choices": [{"message": {
+    "content": "Oferta inventada pelo modelo: R$ 0,01 em https://inventada.example/",
+    "executed_tools": [{
+      "type": "browser_search",
+      "search_results": {"results": [
+        {"title": "Arroz 5 kg — R$ 22,90", "url": "https://mercado-a.example/arroz", "content": "Produto disponível por R$ 22,90."},
+        {"title": "Arroz 5 kg", "url": "https://mercado-b.example/arroz", "content": "Oferta à vista: R$ 23.50."},
+        {"title": "Sem preço", "url": "https://sem-preco.example/arroz", "content": "Consulte o preço na loja."},
+        {"title": "Arroz R$ 1,00", "url": "http://insegura.example/arroz", "content": "Oferta"},
+        {"title": "Arroz R$ 2,00", "url": "https://usuario:senha@credenciais.example/arroz", "content": "Oferta"},
+        {"title": "Arroz R$ 22,90", "url": "https://mercado-a.example/arroz#duplicado", "content": "Mesmo produto"},
+        {"title": "De R$ 30,00 por R$ 20,00", "url": "https://ambiguo.example/arroz", "content": "Vários preços"}
+      ]}
+    }]
+  }}]
+}

@@ -284,10 +284,11 @@ class DemoRepository implements CicRepository {
   }
 
   @override
-  Future<void> salvarFeedbackCampo({required int nota, required List<String> aspectos, required String comentario, required bool recomendaria, String interesseSite = 'nao_agora'}) async {
+  Future<void> salvarFeedbackCampo({int? nota, required List<String> aspectos, required String comentario, bool? recomendaria, String interesseSite = 'nao_agora', Map<String, dynamic>? respostas}) async {
     _feedbacks.insert(0, {
       'id': _seq++, 'nota': nota, 'aspectos': aspectos, 'comentario': comentario,
       'recomendaria': recomendaria, 'interesse_site': interesseSite,
+      'respostas': ?respostas,
       'semana_inicio': _inicioSemana().toIso8601String().split('T').first,
     });
   }
